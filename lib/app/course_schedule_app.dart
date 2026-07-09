@@ -111,15 +111,11 @@ class _ScheduleHomeState extends State<ScheduleHome> {
                   onWeekChanged: (week) => setState(() => _selectedWeek = week),
                 ),
                 Expanded(
-                  child: compact
-                      ? _MobileTimetable(
-                          scheduled: scheduled,
-                          onCourseTap: _showCourseDetails,
-                        )
-                      : _DesktopTimetable(
-                          scheduled: scheduled,
-                          onCourseTap: _showCourseDetails,
-                        ),
+                  child: _TimetableGrid(
+                    compact: compact,
+                    scheduled: scheduled,
+                    onCourseTap: _showCourseDetails,
+                  ),
                 ),
               ],
             );
@@ -331,209 +327,340 @@ class _WeekRangeBadge extends StatelessWidget {
   }
 }
 
-class _DesktopTimetable extends StatelessWidget {
-  const _DesktopTimetable({required this.scheduled, required this.onCourseTap});
-
-  final List<ScheduledCourse> scheduled;
-  final void Function(Course course, CourseSession? session) onCourseTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final byDay = _groupByDay(scheduled);
-    return ListView(
-      padding: const EdgeInsets.all(18),
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (var day = 1; day <= 7; day++)
-              Expanded(
-                child: Padding(
-                  padding: EdgeInsets.only(right: day == 7 ? 0 : 10),
-                  child: _DayColumn(
-                    dayLabel: weekdays[day - 1],
-                    scheduled: byDay[day] ?? const [],
-                    onCourseTap: onCourseTap,
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _MobileTimetable extends StatelessWidget {
-  const _MobileTimetable({required this.scheduled, required this.onCourseTap});
-
-  final List<ScheduledCourse> scheduled;
-  final void Function(Course course, CourseSession? session) onCourseTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final byDay = _groupByDay(scheduled);
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
-      children: [
-        for (var day = 1; day <= 7; day++) ...[
-          _DayColumn(
-            dayLabel: weekdays[day - 1],
-            scheduled: byDay[day] ?? const [],
-            onCourseTap: onCourseTap,
-          ),
-          const SizedBox(height: 12),
-        ],
-      ],
-    );
-  }
-}
-
-class _DayColumn extends StatelessWidget {
-  const _DayColumn({
-    required this.dayLabel,
+class _TimetableGrid extends StatelessWidget {
+  const _TimetableGrid({
+    required this.compact,
     required this.scheduled,
     required this.onCourseTap,
   });
 
-  final String dayLabel;
+  final bool compact;
+  final List<ScheduledCourse> scheduled;
+  final void Function(Course course, CourseSession? session) onCourseTap;
+
+  static const _headerHeight = 44.0;
+  static const _rowHeight = 62.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final padding = compact ? 12.0 : 18.0;
+    final leftWidth = compact ? 68.0 : 86.0;
+    final minDayWidth = compact ? 124.0 : 138.0;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth = constraints.maxWidth - padding * 2;
+        final minTableWidth = leftWidth + minDayWidth * weekdays.length;
+        final tableWidth = availableWidth > minTableWidth
+            ? availableWidth
+            : minTableWidth;
+        final dayWidth = (tableWidth - leftWidth) / weekdays.length;
+        final tableHeight =
+            _headerHeight + _rowHeight * _timetableSections.length;
+
+        return Scrollbar(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.all(padding),
+            child: Scrollbar(
+              notificationPredicate: (notification) =>
+                  notification.metrics.axis == Axis.horizontal,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: tableWidth,
+                  height: tableHeight,
+                  child: _TimetableCanvas(
+                    leftWidth: leftWidth,
+                    dayWidth: dayWidth,
+                    headerHeight: _headerHeight,
+                    rowHeight: _rowHeight,
+                    scheduled: scheduled,
+                    onCourseTap: onCourseTap,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _TimetableCanvas extends StatelessWidget {
+  const _TimetableCanvas({
+    required this.leftWidth,
+    required this.dayWidth,
+    required this.headerHeight,
+    required this.rowHeight,
+    required this.scheduled,
+    required this.onCourseTap,
+  });
+
+  final double leftWidth;
+  final double dayWidth;
+  final double headerHeight;
+  final double rowHeight;
   final List<ScheduledCourse> scheduled;
   final void Function(Course course, CourseSession? session) onCourseTap;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Container(
-      constraints: const BoxConstraints(minHeight: 160),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: scheme.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: scheme.surfaceContainerHighest.withValues(alpha: 0.48),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(8),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: scheme.outlineVariant),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Stack(
+          children: [
+            _CornerCell(width: leftWidth, height: headerHeight),
+            for (var day = 0; day < weekdays.length; day++)
+              _HeaderCell(
+                left: leftWidth + day * dayWidth,
+                width: dayWidth,
+                height: headerHeight,
+                label: weekdays[day],
               ),
-            ),
-            child: Text(
-              dayLabel,
-              style: const TextStyle(fontWeight: FontWeight.w700),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          if (scheduled.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(14),
-              child: Text('无课程', textAlign: TextAlign.center),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: Column(
-                children: [
-                  for (final item in scheduled) ...[
-                    _CourseTile(
-                      scheduled: item,
-                      onTap: () => onCourseTap(item.course, item.session),
-                    ),
-                    if (item != scheduled.last) const SizedBox(height: 8),
-                  ],
-                ],
+            for (var index = 0; index < _timetableSections.length; index++)
+              _SectionCell(
+                top: headerHeight + index * rowHeight,
+                width: leftWidth,
+                height: rowHeight,
+                label: _timetableSections[index].label,
               ),
-            ),
-        ],
+            for (var day = 0; day < weekdays.length; day++)
+              for (var index = 0; index < _timetableSections.length; index++)
+                _GridCell(
+                  left: leftWidth + day * dayWidth,
+                  top: headerHeight + index * rowHeight,
+                  width: dayWidth,
+                  height: rowHeight,
+                ),
+            for (final item in scheduled)
+              if (_sectionSpanFor(item.session) case final span?)
+                _PositionedCourseBlock(
+                  scheduled: item,
+                  left: leftWidth + (item.session.weekday - 1) * dayWidth + 4,
+                  top: headerHeight + span.startIndex * rowHeight + 4,
+                  width: dayWidth - 8,
+                  height: span.length * rowHeight - 8,
+                  onTap: () => onCourseTap(item.course, item.session),
+                ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _CourseTile extends StatelessWidget {
-  const _CourseTile({required this.scheduled, required this.onTap});
+class _CornerCell extends StatelessWidget {
+  const _CornerCell({required this.width, required this.height});
+
+  final double width;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: 0,
+      top: 0,
+      width: width,
+      height: height,
+      child: _TableCellShell(
+        background: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: const Text('节次', style: TextStyle(fontWeight: FontWeight.w800)),
+      ),
+    );
+  }
+}
+
+class _HeaderCell extends StatelessWidget {
+  const _HeaderCell({
+    required this.left,
+    required this.width,
+    required this.height,
+    required this.label,
+  });
+
+  final double left;
+  final double width;
+  final double height;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: left,
+      top: 0,
+      width: width,
+      height: height,
+      child: _TableCellShell(
+        background: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
+      ),
+    );
+  }
+}
+
+class _SectionCell extends StatelessWidget {
+  const _SectionCell({
+    required this.top,
+    required this.width,
+    required this.height,
+    required this.label,
+  });
+
+  final double top;
+  final double width;
+  final double height;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: 0,
+      top: top,
+      width: width,
+      height: height,
+      child: _TableCellShell(
+        background: const Color(0xFFFAFBFC),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+        ),
+      ),
+    );
+  }
+}
+
+class _GridCell extends StatelessWidget {
+  const _GridCell({
+    required this.left,
+    required this.top,
+    required this.width,
+    required this.height,
+  });
+
+  final double left;
+  final double top;
+  final double width;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: left,
+      top: top,
+      width: width,
+      height: height,
+      child: _TableCellShell(
+        background: Colors.white,
+        child: const SizedBox.shrink(),
+      ),
+    );
+  }
+}
+
+class _TableCellShell extends StatelessWidget {
+  const _TableCellShell({required this.background, required this.child});
+
+  final Color background;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: background,
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outlineVariant,
+          width: 0.5,
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      child: child,
+    );
+  }
+}
+
+class _PositionedCourseBlock extends StatelessWidget {
+  const _PositionedCourseBlock({
+    required this.scheduled,
+    required this.left,
+    required this.top,
+    required this.width,
+    required this.height,
+    required this.onTap,
+  });
 
   final ScheduledCourse scheduled;
+  final double left;
+  final double top;
+  final double width;
+  final double height;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final color = _courseColor(scheduled.course.name);
     final session = scheduled.session;
-    return Material(
-      color: color.withValues(alpha: 0.11),
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        onTap: onTap,
+    return Positioned(
+      left: left,
+      top: top,
+      width: width,
+      height: height,
+      child: Material(
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(8),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: color.withValues(alpha: 0.30)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                scheduled.course.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: color,
-                  fontWeight: FontWeight.w800,
-                  height: 1.2,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: color.withValues(alpha: 0.35)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  scheduled.course.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: color,
+                    fontWeight: FontWeight.w800,
+                    height: 1.15,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              _TileLine(
-                icon: Icons.schedule,
-                text:
-                    '${session.periodName} ${session.startTime}-${session.endTime}',
-              ),
-              const SizedBox(height: 4),
-              _TileLine(
-                icon: Icons.place,
-                text: session.location.isEmpty ? '地点未公布' : session.location,
-              ),
-              const SizedBox(height: 4),
-              _TileLine(
-                icon: Icons.person,
-                text: scheduled.course.teachers.join('、'),
-              ),
-            ],
+                const SizedBox(height: 4),
+                Text(
+                  session.location.isEmpty ? '地点未公布' : session.location,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12, color: Colors.black87),
+                ),
+                const Spacer(),
+                Text(
+                  session.startTime.isEmpty
+                      ? session.periodName
+                      : '${session.startTime}-${session.endTime}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 11.5, color: Colors.black54),
+                ),
+              ],
+            ),
           ),
         ),
       ),
-    );
-  }
-}
-
-class _TileLine extends StatelessWidget {
-  const _TileLine({required this.icon, required this.text});
-
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, size: 14, color: Colors.black54),
-        const SizedBox(width: 4),
-        Expanded(
-          child: Text(
-            text,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 12.5, color: Colors.black87),
-          ),
-        ),
-      ],
     );
   }
 }
@@ -716,12 +843,54 @@ class _ErrorScreen extends StatelessWidget {
   }
 }
 
-Map<int, List<ScheduledCourse>> _groupByDay(List<ScheduledCourse> scheduled) {
-  final byDay = <int, List<ScheduledCourse>>{};
-  for (final item in scheduled) {
-    byDay.putIfAbsent(item.session.weekday, () => []).add(item);
+class _TimetableSection {
+  const _TimetableSection({required this.id, required this.label});
+
+  final String id;
+  final String label;
+}
+
+class _SectionSpan {
+  const _SectionSpan({required this.startIndex, required this.length});
+
+  final int startIndex;
+  final int length;
+}
+
+const _timetableSections = [
+  _TimetableSection(id: '第1节', label: '第1节'),
+  _TimetableSection(id: '第2节', label: '第2节'),
+  _TimetableSection(id: '第3节', label: '第3节'),
+  _TimetableSection(id: '第4节', label: '第4节'),
+  _TimetableSection(id: '中午1节', label: '中午1'),
+  _TimetableSection(id: '中午2节', label: '中午2'),
+  _TimetableSection(id: '第5节', label: '第5节'),
+  _TimetableSection(id: '第6节', label: '第6节'),
+  _TimetableSection(id: '第7节', label: '第7节'),
+  _TimetableSection(id: '第8节', label: '第8节'),
+  _TimetableSection(id: '第9节', label: '第9节'),
+  _TimetableSection(id: '第10节', label: '第10节'),
+  _TimetableSection(id: '第11节', label: '第11节'),
+  _TimetableSection(id: '第12节', label: '第12节'),
+];
+
+_SectionSpan? _sectionSpanFor(CourseSession session) {
+  final indexes =
+      session.sections
+          .map(
+            (section) =>
+                _timetableSections.indexWhere((item) => item.id == section),
+          )
+          .where((index) => index >= 0)
+          .toList()
+        ..sort();
+  if (indexes.isEmpty) {
+    return null;
   }
-  return byDay;
+  return _SectionSpan(
+    startIndex: indexes.first,
+    length: indexes.last - indexes.first + 1,
+  );
 }
 
 String _weekRangeLabel(Semester semester, int week) {
