@@ -366,7 +366,6 @@ class _PreviewCardState extends State<_PreviewCard> {
   Widget build(BuildContext context) {
     final semester = widget.semester;
     final compact = MediaQuery.sizeOf(context).width < 760;
-    final dateRange = semester.dateRangeForWeek(_selectedWeek);
     final scheduled = semester.scheduledCoursesForWeek(_selectedWeek);
     return _ImportSection(
       child: Column(
@@ -403,16 +402,10 @@ class _PreviewCardState extends State<_PreviewCard> {
             ),
           ),
           const SizedBox(height: 10),
-          _PreviewLine(
-            label: '日期范围',
-            value: dateRange == null
-                ? '未配置'
-                : '${_formatDate(dateRange.start)} - ${_formatDate(dateRange.end)}',
-          ),
-          const SizedBox(height: 10),
           TimetableGrid(
             compact: compact,
             scheduled: scheduled,
+            weekDateRange: semester.dateRangeForWeek(_selectedWeek),
             onCourseTap: (course, session) =>
                 _showPreviewCourseDetails(context, course, session),
           ),

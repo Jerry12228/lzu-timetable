@@ -194,6 +194,9 @@ class _ScheduleHomeState extends State<ScheduleHome> {
                   child: TimetableGrid(
                     compact: compact,
                     scheduled: scheduled,
+                    weekDateRange: _selectedSemester.dateRangeForWeek(
+                      _selectedWeek,
+                    ),
                     onCourseTap: _showCourseDetails,
                   ),
                 ),
@@ -252,20 +255,6 @@ class _ScheduleControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final controls = <Widget>[
-      _SemesterDropdown(
-        semesters: semesters,
-        selectedSemester: selectedSemester,
-        onChanged: onSemesterChanged,
-      ),
-      _WeekDropdown(
-        maxWeek: selectedSemester.maxWeek,
-        selectedWeek: selectedWeek,
-        onChanged: onWeekChanged,
-      ),
-      _WeekRangeBadge(label: _weekRangeLabel(selectedSemester, selectedWeek)),
-    ];
-
     return Container(
       width: double.infinity,
       padding: EdgeInsets.fromLTRB(
@@ -287,20 +276,38 @@ class _ScheduleControls extends StatelessWidget {
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                controls[0],
+                _SemesterDropdown(
+                  semesters: semesters,
+                  selectedSemester: selectedSemester,
+                  onChanged: onSemesterChanged,
+                ),
                 const SizedBox(height: 10),
-                controls[1],
-                const SizedBox(height: 10),
-                controls[2],
+                _WeekDropdown(
+                  maxWeek: selectedSemester.maxWeek,
+                  selectedWeek: selectedWeek,
+                  onChanged: onWeekChanged,
+                ),
               ],
             )
           : Row(
               children: [
-                SizedBox(width: 260, child: controls[0]),
+                SizedBox(
+                  width: 260,
+                  child: _SemesterDropdown(
+                    semesters: semesters,
+                    selectedSemester: selectedSemester,
+                    onChanged: onSemesterChanged,
+                  ),
+                ),
                 const SizedBox(width: 12),
-                SizedBox(width: 160, child: controls[1]),
-                const SizedBox(width: 12),
-                Expanded(child: controls[2]),
+                SizedBox(
+                  width: 160,
+                  child: _WeekDropdown(
+                    maxWeek: selectedSemester.maxWeek,
+                    selectedWeek: selectedWeek,
+                    onChanged: onWeekChanged,
+                  ),
+                ),
               ],
             ),
     );
@@ -376,41 +383,6 @@ class _WeekDropdown extends StatelessWidget {
           onChanged(week);
         }
       },
-    );
-  }
-}
-
-class _WeekRangeBadge extends StatelessWidget {
-  const _WeekRangeBadge({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      constraints: const BoxConstraints(minHeight: 48),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: scheme.secondaryContainer.withValues(alpha: 0.42),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: scheme.secondary.withValues(alpha: 0.28)),
-      ),
-      alignment: Alignment.centerLeft,
-      child: Row(
-        children: [
-          Icon(Icons.calendar_month, size: 18, color: scheme.secondary),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              label,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -591,20 +563,6 @@ class _ErrorScreen extends StatelessWidget {
       ),
     );
   }
-}
-
-String _weekRangeLabel(Semester semester, int week) {
-  final range = semester.dateRangeForWeek(week);
-  if (range == null) {
-    return '第$week周 · 开学日期未配置';
-  }
-  return '${_formatDate(range.start)} - ${_formatDate(range.end)}';
-}
-
-String _formatDate(DateTime date) {
-  final month = date.month.toString().padLeft(2, '0');
-  final day = date.day.toString().padLeft(2, '0');
-  return '${date.year}-$month-$day';
 }
 
 bool _hasAnyLink(Course course) =>

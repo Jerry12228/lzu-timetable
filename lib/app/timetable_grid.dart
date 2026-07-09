@@ -8,13 +8,16 @@ class TimetableGrid extends StatelessWidget {
     required this.compact,
     required this.scheduled,
     required this.onCourseTap,
+    this.weekDateRange,
   });
 
   final bool compact;
   final List<ScheduledCourse> scheduled;
   final void Function(Course course, CourseSession? session) onCourseTap;
+  final DateRange? weekDateRange;
 
   static const _headerHeight = 44.0;
+  static const _datedHeaderHeight = 58.0;
   static const _rowHeight = 62.0;
 
   @override
@@ -31,8 +34,11 @@ class TimetableGrid extends StatelessWidget {
             ? availableWidth
             : minTableWidth;
         final dayWidth = (tableWidth - leftWidth) / weekdays.length;
+        final headerHeight = weekDateRange == null
+            ? _headerHeight
+            : _datedHeaderHeight;
         final tableHeight =
-            _headerHeight + _rowHeight * _timetableSections.length;
+            headerHeight + _rowHeight * _timetableSections.length;
 
         return Scrollbar(
           child: SingleChildScrollView(
@@ -48,9 +54,10 @@ class TimetableGrid extends StatelessWidget {
                   child: _TimetableCanvas(
                     leftWidth: leftWidth,
                     dayWidth: dayWidth,
-                    headerHeight: _headerHeight,
+                    headerHeight: headerHeight,
                     rowHeight: _rowHeight,
                     scheduled: scheduled,
+                    weekDateRange: weekDateRange,
                     onCourseTap: onCourseTap,
                   ),
                 ),
@@ -70,6 +77,7 @@ class _TimetableCanvas extends StatelessWidget {
     required this.headerHeight,
     required this.rowHeight,
     required this.scheduled,
+    required this.weekDateRange,
     required this.onCourseTap,
   });
 
@@ -78,6 +86,7 @@ class _TimetableCanvas extends StatelessWidget {
   final double headerHeight;
   final double rowHeight;
   final List<ScheduledCourse> scheduled;
+  final DateRange? weekDateRange;
   final void Function(Course course, CourseSession? session) onCourseTap;
 
   @override
@@ -106,6 +115,7 @@ class _TimetableCanvas extends StatelessWidget {
                 width: dayWidth,
                 height: headerHeight,
                 label: weekdays[day],
+                date: weekDateRange?.start.add(Duration(days: day)),
               ),
             for (var index = 0; index < _timetableSections.length; index++)
               _SectionCell(
@@ -167,12 +177,14 @@ class _HeaderCell extends StatelessWidget {
     required this.width,
     required this.height,
     required this.label,
+    required this.date,
   });
 
   final double left;
   final double width;
   final double height;
   final String label;
+  final DateTime? date;
 
   @override
   Widget build(BuildContext context) {
@@ -183,7 +195,25 @@ class _HeaderCell extends StatelessWidget {
       height: height,
       child: _TableCellShell(
         background: Theme.of(context).colorScheme.surfaceContainerHighest,
-        child: Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
+            if (date != null) ...[
+              const SizedBox(height: 2),
+              Text(
+                _formatDate(date!),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  color: Colors.black54,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -541,4 +571,10 @@ Color _courseColor(String key) {
   ];
   final hash = key.runes.fold<int>(0, (value, rune) => value + rune);
   return colors[hash % colors.length];
+}
+
+String _formatDate(DateTime date) {
+  final month = date.month.toString().padLeft(2, '0');
+  final day = date.day.toString().padLeft(2, '0');
+  return '${date.year}-$month-$day';
 }
