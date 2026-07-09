@@ -114,14 +114,10 @@ class _ScheduleHomeState extends State<ScheduleHome> {
                   child: compact
                       ? _MobileTimetable(
                           scheduled: scheduled,
-                          unscheduled:
-                              _selectedSemester.coursesWithoutFixedSchedule,
                           onCourseTap: _showCourseDetails,
                         )
                       : _DesktopTimetable(
                           scheduled: scheduled,
-                          unscheduled:
-                              _selectedSemester.coursesWithoutFixedSchedule,
                           onCourseTap: _showCourseDetails,
                         ),
                 ),
@@ -336,14 +332,9 @@ class _WeekRangeBadge extends StatelessWidget {
 }
 
 class _DesktopTimetable extends StatelessWidget {
-  const _DesktopTimetable({
-    required this.scheduled,
-    required this.unscheduled,
-    required this.onCourseTap,
-  });
+  const _DesktopTimetable({required this.scheduled, required this.onCourseTap});
 
   final List<ScheduledCourse> scheduled;
-  final List<Course> unscheduled;
   final void Function(Course course, CourseSession? session) onCourseTap;
 
   @override
@@ -368,24 +359,15 @@ class _DesktopTimetable extends StatelessWidget {
               ),
           ],
         ),
-        if (unscheduled.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          _UnscheduledSection(courses: unscheduled, onCourseTap: onCourseTap),
-        ],
       ],
     );
   }
 }
 
 class _MobileTimetable extends StatelessWidget {
-  const _MobileTimetable({
-    required this.scheduled,
-    required this.unscheduled,
-    required this.onCourseTap,
-  });
+  const _MobileTimetable({required this.scheduled, required this.onCourseTap});
 
   final List<ScheduledCourse> scheduled;
-  final List<Course> unscheduled;
   final void Function(Course course, CourseSession? session) onCourseTap;
 
   @override
@@ -402,8 +384,6 @@ class _MobileTimetable extends StatelessWidget {
           ),
           const SizedBox(height: 12),
         ],
-        if (unscheduled.isNotEmpty)
-          _UnscheduledSection(courses: unscheduled, onCourseTap: onCourseTap),
       ],
     );
   }
@@ -554,87 +534,6 @@ class _TileLine extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _UnscheduledSection extends StatelessWidget {
-  const _UnscheduledSection({required this.courses, required this.onCourseTap});
-
-  final List<Course> courses;
-  final void Function(Course course, CourseSession? session) onCourseTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: scheme.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.public, size: 18, color: scheme.primary),
-              const SizedBox(width: 8),
-              const Text(
-                '无固定时间',
-                style: TextStyle(fontWeight: FontWeight.w800),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              for (final course in courses)
-                _UnscheduledChip(
-                  course: course,
-                  onTap: () => onCourseTap(course, null),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _UnscheduledChip extends StatelessWidget {
-  const _UnscheduledChip({required this.course, required this.onTap});
-
-  final Course course;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = _courseColor(course.name);
-    return Material(
-      color: color.withValues(alpha: 0.10),
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 260),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: color.withValues(alpha: 0.25)),
-          ),
-          child: Text(
-            course.name,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: color, fontWeight: FontWeight.w700),
-          ),
-        ),
-      ),
     );
   }
 }

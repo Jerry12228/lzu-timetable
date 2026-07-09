@@ -18,6 +18,8 @@ void main() {
     expect(find.text('2025-2026-2学期'), findsOneWidget);
     expect(find.text('第1周 · 开学日期未配置'), findsOneWidget);
     expect(find.text('中国近现代史纲要'), findsOneWidget);
+    expect(find.text('无固定时间'), findsNothing);
+    expect(find.text('通信原理'), findsNothing);
   });
 
   testWidgets('switches week and updates visible courses', (tester) async {
