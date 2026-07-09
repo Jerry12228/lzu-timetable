@@ -407,6 +407,7 @@ class _TimetableCanvas extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final occupiedSlots = _occupiedSlotsFor(scheduled);
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: DecoratedBox(
@@ -434,12 +435,13 @@ class _TimetableCanvas extends StatelessWidget {
               ),
             for (var day = 0; day < weekdays.length; day++)
               for (var index = 0; index < _timetableSections.length; index++)
-                _GridCell(
-                  left: leftWidth + day * dayWidth,
-                  top: headerHeight + index * rowHeight,
-                  width: dayWidth,
-                  height: rowHeight,
-                ),
+                if (!_isSlotOccupied(occupiedSlots, day + 1, index))
+                  _GridCell(
+                    left: leftWidth + day * dayWidth,
+                    top: headerHeight + index * rowHeight,
+                    width: dayWidth,
+                    height: rowHeight,
+                  ),
             for (final item in scheduled)
               if (_sectionSpanFor(item.session) case final span?)
                 _PositionedCourseBlock(
@@ -609,7 +611,6 @@ class _PositionedCourseBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _courseColor(scheduled.course.name);
-    final background = _courseBackgroundColor(color);
     final session = scheduled.session;
     return Positioned(
       left: left,
@@ -617,7 +618,7 @@ class _PositionedCourseBlock extends StatelessWidget {
       width: width,
       height: height,
       child: Material(
-        color: background,
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
           onTap: onTap,
@@ -894,6 +895,36 @@ _SectionSpan? _sectionSpanFor(CourseSession session) {
   );
 }
 
+Map<int, Set<int>> _occupiedSlotsFor(List<ScheduledCourse> scheduled) {
+  final occupied = <int, Set<int>>{};
+  for (final item in scheduled) {
+    final span = _sectionSpanFor(item.session);
+    if (span == null) {
+      continue;
+    }
+    final weekdaySlots = occupied.putIfAbsent(
+      item.session.weekday,
+      () => <int>{},
+    );
+    for (
+      var index = span.startIndex;
+      index < span.startIndex + span.length;
+      index++
+    ) {
+      weekdaySlots.add(index);
+    }
+  }
+  return occupied;
+}
+
+bool _isSlotOccupied(
+  Map<int, Set<int>> occupiedSlots,
+  int weekday,
+  int sectionIndex,
+) {
+  return occupiedSlots[weekday]?.contains(sectionIndex) ?? false;
+}
+
 String _weekRangeLabel(Semester semester, int week) {
   final range = semester.dateRangeForWeek(week);
   if (range == null) {
@@ -921,10 +952,6 @@ Color _courseColor(String key) {
   ];
   final hash = key.runes.fold<int>(0, (value, rune) => value + rune);
   return colors[hash % colors.length];
-}
-
-Color _courseBackgroundColor(Color color) {
-  return Color.alphaBlend(color.withValues(alpha: 0.12), Colors.white);
 }
 
 bool _hasAnyLink(Course course) =>
