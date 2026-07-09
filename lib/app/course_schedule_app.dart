@@ -407,7 +407,12 @@ class _TimetableCanvas extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final occupiedSpans = _occupiedSpansFor(scheduled);
+    const courseInset = 4.0;
+    final suppressedLineSegments = _suppressedLineSegmentsFor(
+      scheduled: scheduled,
+      dayWidth: dayWidth,
+      courseInset: courseInset,
+    );
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: DecoratedBox(
@@ -440,7 +445,7 @@ class _TimetableCanvas extends StatelessWidget {
               height: rowHeight * _timetableSections.length,
               dayWidth: dayWidth,
               rowHeight: rowHeight,
-              occupiedSpans: occupiedSpans,
+              suppressedLineSegments: suppressedLineSegments,
             ),
             for (final item in scheduled)
               if (_sectionSpanFor(item.session) case final span?)
@@ -548,7 +553,7 @@ class _GridLinesLayer extends StatelessWidget {
     required this.height,
     required this.dayWidth,
     required this.rowHeight,
-    required this.occupiedSpans,
+    required this.suppressedLineSegments,
   });
 
   final double left;
@@ -557,7 +562,7 @@ class _GridLinesLayer extends StatelessWidget {
   final double height;
   final double dayWidth;
   final double rowHeight;
-  final Map<int, List<_SectionSpan>> occupiedSpans;
+  final Map<int, List<_SuppressedLineSegment>> suppressedLineSegments;
 
   @override
   Widget build(BuildContext context) {
@@ -573,8 +578,7 @@ class _GridLinesLayer extends StatelessWidget {
           rowCount: _timetableSections.length,
           dayCount: weekdays.length,
           lineColor: Theme.of(context).colorScheme.outlineVariant,
-          occupiedSpans: occupiedSpans,
-          courseInset: 4,
+          suppressedLineSegments: suppressedLineSegments,
         ),
         child: const SizedBox.expand(),
       ),
@@ -589,8 +593,7 @@ class _GridLinesPainter extends CustomPainter {
     required this.rowCount,
     required this.dayCount,
     required this.lineColor,
-    required this.occupiedSpans,
-    required this.courseInset,
+    required this.suppressedLineSegments,
   });
 
   final double dayWidth;
@@ -598,8 +601,7 @@ class _GridLinesPainter extends CustomPainter {
   final int rowCount;
   final int dayCount;
   final Color lineColor;
-  final Map<int, List<_SectionSpan>> occupiedSpans;
-  final double courseInset;
+  final Map<int, List<_SuppressedLineSegment>> suppressedLineSegments;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -617,32 +619,39 @@ class _GridLinesPainter extends CustomPainter {
 
     for (var boundary = 0; boundary <= rowCount; boundary++) {
       final y = boundary * rowHeight;
-      for (var day = 1; day <= dayCount; day++) {
-        final dayLeft = (day - 1) * dayWidth;
-        final dayRight = day * dayWidth;
-        if (_lineCrossesCourse(day, boundary)) {
-          canvas.drawLine(
-            Offset(dayLeft, y),
-            Offset(dayLeft + courseInset, y),
-            line,
-          );
-          canvas.drawLine(
-            Offset(dayRight - courseInset, y),
-            Offset(dayRight, y),
-            line,
-          );
-        } else {
-          canvas.drawLine(Offset(dayLeft, y), Offset(dayRight, y), line);
-        }
-      }
+      _drawHorizontalLine(
+        canvas: canvas,
+        paint: line,
+        y: y,
+        width: dayWidth * dayCount,
+        suppressed: suppressedLineSegments[boundary] ?? const [],
+      );
     }
   }
 
-  bool _lineCrossesCourse(int weekday, int boundary) {
-    final spans = occupiedSpans[weekday] ?? const <_SectionSpan>[];
-    return spans.any(
-      (span) => span.startIndex < boundary && boundary < span.endIndex,
-    );
+  void _drawHorizontalLine({
+    required Canvas canvas,
+    required Paint paint,
+    required double y,
+    required double width,
+    required List<_SuppressedLineSegment> suppressed,
+  }) {
+    var start = 0.0;
+    final ordered = suppressed.toList()
+      ..sort((a, b) => a.start.compareTo(b.start));
+    for (final segment in ordered) {
+      final segmentStart = segment.start.clamp(0.0, width);
+      final segmentEnd = segment.end.clamp(0.0, width);
+      if (segmentStart > start) {
+        canvas.drawLine(Offset(start, y), Offset(segmentStart, y), paint);
+      }
+      if (segmentEnd > start) {
+        start = segmentEnd;
+      }
+    }
+    if (start < width) {
+      canvas.drawLine(Offset(start, y), Offset(width, y), paint);
+    }
   }
 
   @override
@@ -652,8 +661,7 @@ class _GridLinesPainter extends CustomPainter {
         rowCount != oldDelegate.rowCount ||
         dayCount != oldDelegate.dayCount ||
         lineColor != oldDelegate.lineColor ||
-        occupiedSpans != oldDelegate.occupiedSpans ||
-        courseInset != oldDelegate.courseInset;
+        suppressedLineSegments != oldDelegate.suppressedLineSegments;
   }
 }
 
@@ -950,6 +958,13 @@ class _SectionSpan {
   int get endIndex => startIndex + length;
 }
 
+class _SuppressedLineSegment {
+  const _SuppressedLineSegment({required this.start, required this.end});
+
+  final double start;
+  final double end;
+}
+
 const _timetableSections = [
   _TimetableSection(id: '第1节', label: '第1节'),
   _TimetableSection(id: '第2节', label: '第2节'),
@@ -986,22 +1001,33 @@ _SectionSpan? _sectionSpanFor(CourseSession session) {
   );
 }
 
-Map<int, List<_SectionSpan>> _occupiedSpansFor(
-  List<ScheduledCourse> scheduled,
-) {
-  final occupied = <int, List<_SectionSpan>>{};
+Map<int, List<_SuppressedLineSegment>> _suppressedLineSegmentsFor({
+  required List<ScheduledCourse> scheduled,
+  required double dayWidth,
+  required double courseInset,
+}) {
+  final suppressed = <int, List<_SuppressedLineSegment>>{};
+  const lineGapOverlap = 2.0;
   for (final item in scheduled) {
     final span = _sectionSpanFor(item.session);
     if (span == null) {
       continue;
     }
-    final weekdaySpans = occupied.putIfAbsent(
-      item.session.weekday,
-      () => <_SectionSpan>[],
-    );
-    weekdaySpans.add(span);
+    final left =
+        (item.session.weekday - 1) * dayWidth + courseInset - lineGapOverlap;
+    final right =
+        item.session.weekday * dayWidth - courseInset + lineGapOverlap;
+    for (
+      var boundary = span.startIndex + 1;
+      boundary < span.endIndex;
+      boundary++
+    ) {
+      suppressed
+          .putIfAbsent(boundary, () => <_SuppressedLineSegment>[])
+          .add(_SuppressedLineSegment(start: left, end: right));
+    }
   }
-  return occupied;
+  return suppressed;
 }
 
 String _weekRangeLabel(Semester semester, int week) {
