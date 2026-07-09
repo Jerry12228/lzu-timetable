@@ -179,7 +179,7 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
       _errorMessage = null;
     });
     try {
-      final result = await FilePicker.pickFiles(
+      final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['html', 'htm', 'txt'],
         withData: true,

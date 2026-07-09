@@ -3,7 +3,7 @@
 ## Project Context
 
 - This repository is a Flutter course schedule app.
-- The first delivery target is Flutter Web. Keep code portable for later Android and iOS Flutter builds.
+- The active delivery targets are Flutter Web and Android. Keep code portable for later iOS Flutter builds.
 - UI text should stay in Chinese unless a product requirement says otherwise.
 
 ## Commands
@@ -12,6 +12,8 @@
 - Install dependencies: `flutter pub get`
 - Run tests: `flutter test`
 - Build web: `flutter build web`
+- Build Android debug APK: `flutter build apk --debug`
+- Run on Android device/emulator: `flutter run -d <device-id>`
 - Local web preview: `flutter run -d web-server`
 
 ## Data Rules
@@ -25,8 +27,8 @@
 
 - Keep parsing logic independent from Flutter widgets.
 - Add tests for every supported week expression and timetable mapping rule.
-- Treat courses with no fixed schedule as valid data and show them outside the weekly grid.
-- Keep responsive layout usable on PC Web and mobile Web.
+- Treat courses with no fixed schedule as valid parsed data, but do not place them in the weekly grid unless a product requirement asks for a separate display.
+- Keep responsive layout usable on PC Web, mobile Web, and Android phones.
 
 ## Git Workflow
 

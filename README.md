@@ -1,17 +1,20 @@
-# course_schedule
+# 课程表
 
-A new Flutter project.
+Flutter 课程表应用，当前支持 Web 和 Android。应用从教务系统课程 HTML 解析课程数据，支持按学期、周次查看表格课程表，并支持粘贴或上传 HTML 导入新课表。
 
-## Getting Started
+## 开发命令
 
-This project is a starting point for a Flutter application.
+- 安装依赖：`flutter pub get`
+- 运行测试：`flutter test`
+- 构建 Web：`flutter build web`
+- Web 本地预览：`flutter run -d web-server`
+- 构建 Android 调试 APK：`flutter build apk --debug`
+- 运行 Android 设备或模拟器：`flutter run -d <device-id>`
 
-A few resources to get you started if this is your first Flutter project:
+## 数据
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+原始教务系统 HTML 样例保存在 `assets/raw/`。课程导入流程复用同一套解析服务，避免手工维护派生数据。
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Android
+
+Android 包名为 `com.jerry.course_schedule`，启动器名称为“课程表”。

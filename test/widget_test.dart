@@ -29,6 +29,22 @@ void main() {
     expect(find.text('通信原理'), findsNothing);
   });
 
+  testWidgets('keeps schedule usable on Android phone width', (tester) async {
+    await _pumpSchedule(tester, semester, size: const Size(390, 844));
+
+    expect(find.text('课程表'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('open-import-page-button')),
+      findsOneWidget,
+    );
+    expect(find.text('2025-2026-2学期'), findsOneWidget);
+    expect(find.text('第1周 · 开学日期未配置'), findsOneWidget);
+    expect(find.text('节次'), findsOneWidget);
+    expect(find.text('星期一'), findsOneWidget);
+    expect(find.text('第1节'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('switches week and updates visible courses', (tester) async {
     await _pumpSchedule(tester, semester);
 
@@ -203,8 +219,9 @@ Future<void> _pumpSchedule(
   WidgetTester tester,
   Semester semester, {
   ImportedSemesterStore? store,
+  Size size = const Size(1280, 900),
 }) async {
-  tester.view.physicalSize = const Size(1280, 900);
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(() {
     tester.view.resetPhysicalSize();
