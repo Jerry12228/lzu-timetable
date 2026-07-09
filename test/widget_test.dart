@@ -116,6 +116,11 @@ void main() {
     expect(find.text('预览结果'), findsOneWidget);
     expect(find.text('19 门'), findsOneWidget);
     expect(find.text('2026-02-23 - 2026-03-01'), findsOneWidget);
+    expect(find.text('预览周次'), findsOneWidget);
+    expect(find.text('节次'), findsOneWidget);
+    expect(find.text('星期一'), findsOneWidget);
+    expect(find.text('第1节'), findsOneWidget);
+    expect(find.text('中国近现代史纲要'), findsOneWidget);
     expect(
       tester
           .widget<FilledButton>(
@@ -140,6 +145,31 @@ void main() {
           .onPressed,
       isNull,
     );
+  });
+
+  testWidgets('switches week inside import preview timetable', (tester) async {
+    await _pumpSchedule(tester, semester);
+    await tester.tap(find.byKey(const ValueKey('open-import-page-button')));
+    await tester.pumpAndSettle();
+    await _enterValidImportForm(tester, '导入课表');
+
+    await tester.tap(find.byKey(const ValueKey('preview-import-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2026-02-23 - 2026-03-01'), findsOneWidget);
+    expect(find.text('大学生心理健康（网络共享课）'), findsNothing);
+
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('preview-week-dropdown')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('preview-week-dropdown')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('第2周').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('2026-03-02 - 2026-03-08'), findsOneWidget);
+    expect(find.text('大学生心理健康（网络共享课）'), findsOneWidget);
   });
 
   testWidgets('confirms preview and selects imported schedule', (tester) async {

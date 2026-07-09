@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../models/schedule_models.dart';
 import '../services/imported_semester_store.dart';
 import '../services/semester_importer.dart';
+import 'timetable_grid.dart';
 
 class ImportSchedulePage extends StatefulWidget {
   const ImportSchedulePage({
@@ -136,7 +137,7 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
             ],
             if (preview != null && hasValidPreview) ...[
               const SizedBox(height: 14),
-              _PreviewCard(semester: preview),
+              _PreviewCard(key: ValueKey(_previewKey), semester: preview),
             ],
           ],
         ),
@@ -341,15 +342,32 @@ class _MessageBanner extends StatelessWidget {
   }
 }
 
-class _PreviewCard extends StatelessWidget {
-  const _PreviewCard({required this.semester});
+class _PreviewCard extends StatefulWidget {
+  const _PreviewCard({super.key, required this.semester});
 
   final Semester semester;
 
   @override
+  State<_PreviewCard> createState() => _PreviewCardState();
+}
+
+class _PreviewCardState extends State<_PreviewCard> {
+  int _selectedWeek = 1;
+
+  @override
+  void didUpdateWidget(covariant _PreviewCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_selectedWeek > widget.semester.maxWeek) {
+      _selectedWeek = widget.semester.maxWeek;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final weekOne = semester.scheduledCoursesForWeek(1).take(5).toList();
-    final dateRange = semester.dateRangeForWeek(1);
+    final semester = widget.semester;
+    final compact = MediaQuery.sizeOf(context).width < 760;
+    final dateRange = semester.dateRangeForWeek(_selectedWeek);
+    final scheduled = semester.scheduledCoursesForWeek(_selectedWeek);
     return _ImportSection(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -361,36 +379,57 @@ class _PreviewCard extends StatelessWidget {
           const SizedBox(height: 12),
           _PreviewLine(label: '课程总数', value: '${semester.courses.length} 门'),
           _PreviewLine(label: '最大周次', value: '第 ${semester.maxWeek} 周'),
+          const SizedBox(height: 8),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 260),
+            child: DropdownButtonFormField<int>(
+              key: const ValueKey('preview-week-dropdown'),
+              initialValue: _selectedWeek,
+              decoration: const InputDecoration(
+                labelText: '预览周次',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              items: [
+                for (var week = 1; week <= semester.maxWeek; week++)
+                  DropdownMenuItem(value: week, child: Text('第$week周')),
+              ],
+              onChanged: (value) {
+                if (value == null) {
+                  return;
+                }
+                setState(() => _selectedWeek = value);
+              },
+            ),
+          ),
+          const SizedBox(height: 10),
           _PreviewLine(
-            label: '第1周日期',
+            label: '日期范围',
             value: dateRange == null
                 ? '未配置'
                 : '${_formatDate(dateRange.start)} - ${_formatDate(dateRange.end)}',
           ),
-          _PreviewLine(
-            label: '无固定时间课程',
-            value: '${semester.coursesWithoutFixedSchedule.length} 门',
-          ),
           const SizedBox(height: 10),
-          const Text('第1周课程示例', style: TextStyle(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 6),
-          if (weekOne.isEmpty)
-            const Text('第1周暂无固定时间课程')
-          else
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final item in weekOne)
-                  Chip(
-                    label: Text(
-                      '${item.session.weekdayText} ${item.course.name}',
-                    ),
-                  ),
-              ],
-            ),
+          TimetableGrid(
+            compact: compact,
+            scheduled: scheduled,
+            onCourseTap: (course, session) =>
+                _showPreviewCourseDetails(context, course, session),
+          ),
         ],
       ),
+    );
+  }
+
+  void _showPreviewCourseDetails(
+    BuildContext context,
+    Course course,
+    CourseSession? session,
+  ) {
+    showDialog<void>(
+      context: context,
+      builder: (context) =>
+          _PreviewCourseDialog(course: course, session: session),
     );
   }
 }
@@ -421,6 +460,49 @@ class _PreviewLine extends StatelessWidget {
           Expanded(child: Text(value)),
         ],
       ),
+    );
+  }
+}
+
+class _PreviewCourseDialog extends StatelessWidget {
+  const _PreviewCourseDialog({required this.course, required this.session});
+
+  final Course course;
+  final CourseSession? session;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(course.name),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _PreviewLine(label: '课程号', value: course.courseCode),
+            _PreviewLine(label: '任课教师', value: course.teachers.join('、')),
+            _PreviewLine(label: '学分', value: course.credits),
+            _PreviewLine(label: '考核方式', value: course.assessment),
+            if (session != null) ...[
+              const SizedBox(height: 8),
+              _PreviewLine(label: '周次', value: session!.weekRule.rawText),
+              _PreviewLine(label: '星期', value: session!.weekdayText),
+              _PreviewLine(label: '节次', value: session!.periodName),
+              _PreviewLine(
+                label: '地点',
+                value: session!.location.isEmpty ? '地点未公布' : session!.location,
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('关闭'),
+        ),
+      ],
     );
   }
 }
