@@ -407,7 +407,7 @@ class _TimetableCanvas extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final occupiedSlots = _occupiedSlotsFor(scheduled);
+    final occupiedSpans = _occupiedSpansFor(scheduled);
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: DecoratedBox(
@@ -433,15 +433,15 @@ class _TimetableCanvas extends StatelessWidget {
                 height: rowHeight,
                 label: _timetableSections[index].label,
               ),
-            for (var day = 0; day < weekdays.length; day++)
-              for (var index = 0; index < _timetableSections.length; index++)
-                if (!_isSlotOccupied(occupiedSlots, day + 1, index))
-                  _GridCell(
-                    left: leftWidth + day * dayWidth,
-                    top: headerHeight + index * rowHeight,
-                    width: dayWidth,
-                    height: rowHeight,
-                  ),
+            _GridLinesLayer(
+              left: leftWidth,
+              top: headerHeight,
+              width: dayWidth * weekdays.length,
+              height: rowHeight * _timetableSections.length,
+              dayWidth: dayWidth,
+              rowHeight: rowHeight,
+              occupiedSpans: occupiedSpans,
+            ),
             for (final item in scheduled)
               if (_sectionSpanFor(item.session) case final span?)
                 _PositionedCourseBlock(
@@ -540,18 +540,24 @@ class _SectionCell extends StatelessWidget {
   }
 }
 
-class _GridCell extends StatelessWidget {
-  const _GridCell({
+class _GridLinesLayer extends StatelessWidget {
+  const _GridLinesLayer({
     required this.left,
     required this.top,
     required this.width,
     required this.height,
+    required this.dayWidth,
+    required this.rowHeight,
+    required this.occupiedSpans,
   });
 
   final double left;
   final double top;
   final double width;
   final double height;
+  final double dayWidth;
+  final double rowHeight;
+  final Map<int, List<_SectionSpan>> occupiedSpans;
 
   @override
   Widget build(BuildContext context) {
@@ -560,11 +566,94 @@ class _GridCell extends StatelessWidget {
       top: top,
       width: width,
       height: height,
-      child: _TableCellShell(
-        background: Colors.white,
-        child: const SizedBox.shrink(),
+      child: CustomPaint(
+        painter: _GridLinesPainter(
+          dayWidth: dayWidth,
+          rowHeight: rowHeight,
+          rowCount: _timetableSections.length,
+          dayCount: weekdays.length,
+          lineColor: Theme.of(context).colorScheme.outlineVariant,
+          occupiedSpans: occupiedSpans,
+          courseInset: 4,
+        ),
+        child: const SizedBox.expand(),
       ),
     );
+  }
+}
+
+class _GridLinesPainter extends CustomPainter {
+  const _GridLinesPainter({
+    required this.dayWidth,
+    required this.rowHeight,
+    required this.rowCount,
+    required this.dayCount,
+    required this.lineColor,
+    required this.occupiedSpans,
+    required this.courseInset,
+  });
+
+  final double dayWidth;
+  final double rowHeight;
+  final int rowCount;
+  final int dayCount;
+  final Color lineColor;
+  final Map<int, List<_SectionSpan>> occupiedSpans;
+  final double courseInset;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final background = Paint()..color = Colors.white;
+    canvas.drawRect(Offset.zero & size, background);
+
+    final line = Paint()
+      ..color = lineColor
+      ..strokeWidth = 0.5;
+
+    for (var day = 0; day <= dayCount; day++) {
+      final x = day * dayWidth;
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), line);
+    }
+
+    for (var boundary = 0; boundary <= rowCount; boundary++) {
+      final y = boundary * rowHeight;
+      for (var day = 1; day <= dayCount; day++) {
+        final dayLeft = (day - 1) * dayWidth;
+        final dayRight = day * dayWidth;
+        if (_lineCrossesCourse(day, boundary)) {
+          canvas.drawLine(
+            Offset(dayLeft, y),
+            Offset(dayLeft + courseInset, y),
+            line,
+          );
+          canvas.drawLine(
+            Offset(dayRight - courseInset, y),
+            Offset(dayRight, y),
+            line,
+          );
+        } else {
+          canvas.drawLine(Offset(dayLeft, y), Offset(dayRight, y), line);
+        }
+      }
+    }
+  }
+
+  bool _lineCrossesCourse(int weekday, int boundary) {
+    final spans = occupiedSpans[weekday] ?? const <_SectionSpan>[];
+    return spans.any(
+      (span) => span.startIndex < boundary && boundary < span.endIndex,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _GridLinesPainter oldDelegate) {
+    return dayWidth != oldDelegate.dayWidth ||
+        rowHeight != oldDelegate.rowHeight ||
+        rowCount != oldDelegate.rowCount ||
+        dayCount != oldDelegate.dayCount ||
+        lineColor != oldDelegate.lineColor ||
+        occupiedSpans != oldDelegate.occupiedSpans ||
+        courseInset != oldDelegate.courseInset;
   }
 }
 
@@ -857,6 +946,8 @@ class _SectionSpan {
 
   final int startIndex;
   final int length;
+
+  int get endIndex => startIndex + length;
 }
 
 const _timetableSections = [
@@ -895,34 +986,22 @@ _SectionSpan? _sectionSpanFor(CourseSession session) {
   );
 }
 
-Map<int, Set<int>> _occupiedSlotsFor(List<ScheduledCourse> scheduled) {
-  final occupied = <int, Set<int>>{};
+Map<int, List<_SectionSpan>> _occupiedSpansFor(
+  List<ScheduledCourse> scheduled,
+) {
+  final occupied = <int, List<_SectionSpan>>{};
   for (final item in scheduled) {
     final span = _sectionSpanFor(item.session);
     if (span == null) {
       continue;
     }
-    final weekdaySlots = occupied.putIfAbsent(
+    final weekdaySpans = occupied.putIfAbsent(
       item.session.weekday,
-      () => <int>{},
+      () => <_SectionSpan>[],
     );
-    for (
-      var index = span.startIndex;
-      index < span.startIndex + span.length;
-      index++
-    ) {
-      weekdaySlots.add(index);
-    }
+    weekdaySpans.add(span);
   }
   return occupied;
-}
-
-bool _isSlotOccupied(
-  Map<int, Set<int>> occupiedSlots,
-  int weekday,
-  int sectionIndex,
-) {
-  return occupiedSlots[weekday]?.contains(sectionIndex) ?? false;
 }
 
 String _weekRangeLabel(Semester semester, int week) {
