@@ -2,6 +2,7 @@ import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 
 import '../models/schedule_models.dart';
+import 'default_periods.dart';
 
 class SemesterImporter {
   const SemesterImporter._();
@@ -21,6 +22,22 @@ class SemesterImporter {
       termStartDate: termStartDate,
       courses: courses,
       periods: periods,
+    );
+  }
+
+  static Semester parseCourseHtml({
+    required String semesterId,
+    required String displayName,
+    required DateTime? termStartDate,
+    required String courseHtml,
+  }) {
+    final courses = _parseCourses(courseHtml, DefaultPeriods.all);
+    return Semester(
+      id: semesterId,
+      displayName: displayName,
+      termStartDate: termStartDate,
+      courses: courses,
+      periods: DefaultPeriods.all,
     );
   }
 
@@ -55,10 +72,14 @@ class SemesterImporter {
     List<PeriodDefinition> periods,
   ) {
     final document = html_parser.parse(html);
+    final rows = document.querySelectorAll('tr.infolist_common');
+    if (rows.isEmpty) {
+      throw const FormatException('未找到课程列表，请确认粘贴或上传的是课程列表 HTML');
+    }
     final periodsByName = {
       for (final period in periods) _compact(period.name): period,
     };
-    return document.querySelectorAll('tr.infolist_common').map((row) {
+    return rows.map((row) {
       final cells = _directCells(row);
       if (cells.length < 10) {
         throw FormatException('Invalid course row: ${row.outerHtml}');

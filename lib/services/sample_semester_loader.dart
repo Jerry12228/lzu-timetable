@@ -10,14 +10,12 @@ class SampleSemesterLoader {
     final courseHtml = await rootBundle.loadString(
       'assets/raw/2025-2026-2-courses.html',
     );
-    final periodHtml = await rootBundle.loadString('assets/raw/periods.html');
     return [
-      SemesterImporter.parseFromHtml(
+      SemesterImporter.parseCourseHtml(
         semesterId: '2025-2026-2',
         displayName: '2025-2026-2学期',
         termStartDate: null,
         courseHtml: courseHtml,
-        periodHtml: periodHtml,
       ),
     ];
   }

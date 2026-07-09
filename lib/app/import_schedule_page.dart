@@ -1,0 +1,447 @@
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+
+import '../models/schedule_models.dart';
+import '../services/imported_semester_store.dart';
+import '../services/semester_importer.dart';
+
+class ImportSchedulePage extends StatefulWidget {
+  const ImportSchedulePage({
+    super.key,
+    required this.existingDisplayNames,
+    required this.store,
+  });
+
+  final List<String> existingDisplayNames;
+  final ImportedSemesterStore store;
+
+  @override
+  State<ImportSchedulePage> createState() => _ImportSchedulePageState();
+}
+
+class _ImportSchedulePageState extends State<ImportSchedulePage> {
+  final _nameController = TextEditingController();
+  final _dateController = TextEditingController();
+  final _htmlController = TextEditingController();
+
+  Semester? _preview;
+  String? _previewKey;
+  String? _errorMessage;
+  bool _isPickingFile = false;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController.addListener(_invalidatePreview);
+    _dateController.addListener(_invalidatePreview);
+    _htmlController.addListener(_invalidatePreview);
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _dateController.dispose();
+    _htmlController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final preview = _preview;
+    final hasValidPreview = preview != null && _previewKey == _currentInputKey;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('导入课程表'),
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(18),
+          children: [
+            _ImportSection(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    key: const ValueKey('import-name-field'),
+                    controller: _nameController,
+                    decoration: const InputDecoration(
+                      labelText: '课表名称',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    key: const ValueKey('import-date-field'),
+                    controller: _dateController,
+                    decoration: InputDecoration(
+                      labelText: '第一周星期一日期',
+                      hintText: 'yyyy-mm-dd',
+                      border: const OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        tooltip: '选择日期',
+                        onPressed: _pickDate,
+                        icon: const Icon(Icons.calendar_month),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    key: const ValueKey('import-html-field'),
+                    controller: _htmlController,
+                    minLines: 10,
+                    maxLines: 18,
+                    decoration: const InputDecoration(
+                      labelText: '课程列表 HTML',
+                      alignLabelWithHint: true,
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _isPickingFile ? null : _pickHtmlFile,
+                        icon: const Icon(Icons.upload_file),
+                        label: Text(_isPickingFile ? '读取中...' : '上传 HTML'),
+                      ),
+                      FilledButton.icon(
+                        key: const ValueKey('preview-import-button'),
+                        onPressed: _previewHtml,
+                        icon: const Icon(Icons.visibility),
+                        label: const Text('预览'),
+                      ),
+                      FilledButton.icon(
+                        key: const ValueKey('confirm-import-button'),
+                        onPressed: hasValidPreview && !_isSaving
+                            ? () => _confirmImport(preview)
+                            : null,
+                        icon: const Icon(Icons.add),
+                        label: Text(_isSaving ? '添加中...' : '确认添加'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            if (_errorMessage != null) ...[
+              const SizedBox(height: 14),
+              _MessageBanner(message: _errorMessage!, isError: true),
+            ],
+            if (preview != null && hasValidPreview) ...[
+              const SizedBox(height: 14),
+              _PreviewCard(semester: preview),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  String get _currentInputKey =>
+      '${_nameController.text.trim()}|${_dateController.text.trim()}|${_htmlController.text}';
+
+  void _invalidatePreview() {
+    if (_preview == null && _errorMessage == null) {
+      return;
+    }
+    setState(() {
+      _preview = null;
+      _previewKey = null;
+      _errorMessage = null;
+    });
+  }
+
+  Future<void> _pickDate() async {
+    final initialDate =
+        _parseDateOrNull(_dateController.text) ?? DateTime.now();
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (selected != null) {
+      _dateController.text = _formatDate(selected);
+    }
+  }
+
+  Future<void> _pickHtmlFile() async {
+    setState(() {
+      _isPickingFile = true;
+      _errorMessage = null;
+    });
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['html', 'htm', 'txt'],
+        withData: true,
+      );
+      final file = result?.files.single;
+      final bytes = file?.bytes;
+      if (file == null || bytes == null) {
+        return;
+      }
+      _htmlController.text = utf8.decode(bytes, allowMalformed: true);
+    } catch (_) {
+      setState(() {
+        _errorMessage = '文件读取失败，请改用粘贴 HTML';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isPickingFile = false);
+      }
+    }
+  }
+
+  void _previewHtml() {
+    try {
+      final semester = _parseInputForPreview();
+      setState(() {
+        _preview = semester;
+        _previewKey = _currentInputKey;
+        _errorMessage = null;
+      });
+    } catch (error) {
+      setState(() {
+        _preview = null;
+        _previewKey = null;
+        _errorMessage = _messageForError(error);
+      });
+    }
+  }
+
+  Future<void> _confirmImport(Semester preview) async {
+    setState(() {
+      _isSaving = true;
+      _errorMessage = null;
+    });
+    try {
+      final displayName = _validatedDisplayName();
+      final termStartDate = _validatedStartDate();
+      final record = await widget.store.addRecord(
+        displayName: displayName,
+        termStartDate: termStartDate,
+        courseHtml: _htmlController.text,
+        existingDisplayNames: widget.existingDisplayNames,
+      );
+      if (mounted) {
+        Navigator.of(context).pop(record.id);
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _errorMessage = _messageForError(error));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
+  Semester _parseInputForPreview() {
+    final displayName = _validatedDisplayName();
+    final termStartDate = _validatedStartDate();
+    final courseHtml = _htmlController.text.trim();
+    if (courseHtml.isEmpty) {
+      throw const FormatException('请粘贴或上传课程列表 HTML');
+    }
+    return SemesterImporter.parseCourseHtml(
+      semesterId: 'preview',
+      displayName: displayName,
+      termStartDate: termStartDate,
+      courseHtml: courseHtml,
+    );
+  }
+
+  String _validatedDisplayName() {
+    final displayName = _nameController.text.trim();
+    if (displayName.isEmpty) {
+      throw const FormatException('请输入课表名称');
+    }
+    final names = widget.existingDisplayNames
+        .map((name) => name.trim())
+        .toSet();
+    if (names.contains(displayName)) {
+      throw DuplicateSemesterNameException(displayName);
+    }
+    return displayName;
+  }
+
+  DateTime _validatedStartDate() {
+    final date = _parseDateOrNull(_dateController.text);
+    if (date == null) {
+      throw const FormatException('请输入有效的第一周星期一日期，例如 2026-02-23');
+    }
+    if (date.weekday != DateTime.monday) {
+      throw const FormatException('第一周星期一日期必须是星期一');
+    }
+    return date;
+  }
+
+  String _messageForError(Object error) {
+    if (error is DuplicateSemesterNameException) {
+      return '课表名称已存在，请修改名称';
+    }
+    if (error is FormatException) {
+      return error.message;
+    }
+    return '导入失败，请确认 HTML 内容来自课程列表页面';
+  }
+}
+
+class _ImportSection extends StatelessWidget {
+  const _ImportSection({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _MessageBanner extends StatelessWidget {
+  const _MessageBanner({required this.message, required this.isError});
+
+  final String message;
+  final bool isError;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isError ? scheme.errorContainer : scheme.primaryContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        message,
+        style: TextStyle(
+          color: isError ? scheme.onErrorContainer : scheme.onPrimaryContainer,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+class _PreviewCard extends StatelessWidget {
+  const _PreviewCard({required this.semester});
+
+  final Semester semester;
+
+  @override
+  Widget build(BuildContext context) {
+    final weekOne = semester.scheduledCoursesForWeek(1).take(5).toList();
+    final dateRange = semester.dateRangeForWeek(1);
+    return _ImportSection(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '预览结果',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 12),
+          _PreviewLine(label: '课程总数', value: '${semester.courses.length} 门'),
+          _PreviewLine(label: '最大周次', value: '第 ${semester.maxWeek} 周'),
+          _PreviewLine(
+            label: '第1周日期',
+            value: dateRange == null
+                ? '未配置'
+                : '${_formatDate(dateRange.start)} - ${_formatDate(dateRange.end)}',
+          ),
+          _PreviewLine(
+            label: '无固定时间课程',
+            value: '${semester.coursesWithoutFixedSchedule.length} 门',
+          ),
+          const SizedBox(height: 10),
+          const Text('第1周课程示例', style: TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          if (weekOne.isEmpty)
+            const Text('第1周暂无固定时间课程')
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final item in weekOne)
+                  Chip(
+                    label: Text(
+                      '${item.session.weekdayText} ${item.course.name}',
+                    ),
+                  ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PreviewLine extends StatelessWidget {
+  const _PreviewLine({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.black54,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Expanded(child: Text(value)),
+        ],
+      ),
+    );
+  }
+}
+
+DateTime? _parseDateOrNull(String value) {
+  final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(value.trim());
+  if (match == null) {
+    return null;
+  }
+  final year = int.parse(match.group(1)!);
+  final month = int.parse(match.group(2)!);
+  final day = int.parse(match.group(3)!);
+  final date = DateTime(year, month, day);
+  if (date.year != year || date.month != month || date.day != day) {
+    return null;
+  }
+  return date;
+}
+
+String _formatDate(DateTime date) {
+  final month = date.month.toString().padLeft(2, '0');
+  final day = date.day.toString().padLeft(2, '0');
+  return '${date.year}-$month-$day';
+}

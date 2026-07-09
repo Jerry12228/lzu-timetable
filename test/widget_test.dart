@@ -1,10 +1,12 @@
 import 'dart:io';
-import 'dart:ui';
 
 import 'package:course_schedule/app/course_schedule_app.dart';
 import 'package:course_schedule/models/schedule_models.dart';
+import 'package:course_schedule/services/imported_semester_store.dart';
 import 'package:course_schedule/services/semester_importer.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   late final semester = _loadSampleSemester();
@@ -52,27 +54,162 @@ void main() {
     expect(find.text('任课教师'), findsOneWidget);
     expect(find.text('关闭'), findsOneWidget);
   });
+
+  testWidgets('opens standalone import page', (tester) async {
+    await _pumpSchedule(tester, semester);
+
+    await tester.tap(find.byKey(const ValueKey('open-import-page-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('导入课程表'), findsOneWidget);
+    expect(find.byKey(const ValueKey('import-name-field')), findsOneWidget);
+    expect(find.byKey(const ValueKey('import-html-field')), findsOneWidget);
+  });
+
+  testWidgets('validates required import fields before preview', (
+    tester,
+  ) async {
+    await _pumpSchedule(tester, semester);
+    await tester.tap(find.byKey(const ValueKey('open-import-page-button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('preview-import-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('请输入课表名称'), findsOneWidget);
+  });
+
+  testWidgets('rejects duplicate imported schedule names', (tester) async {
+    await _pumpSchedule(tester, semester);
+    await tester.tap(find.byKey(const ValueKey('open-import-page-button')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('import-name-field')),
+      ' 2025-2026-2学期 ',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('import-date-field')),
+      '2026-02-23',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('import-html-field')),
+      File('assets/raw/2025-2026-2-courses.html').readAsStringSync(),
+    );
+    await tester.tap(find.byKey(const ValueKey('preview-import-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('课表名称已存在，请修改名称'), findsOneWidget);
+  });
+
+  testWidgets('previews pasted html and disables confirm after edits', (
+    tester,
+  ) async {
+    await _pumpSchedule(tester, semester);
+    await tester.tap(find.byKey(const ValueKey('open-import-page-button')));
+    await tester.pumpAndSettle();
+    await _enterValidImportForm(tester, '导入课表');
+
+    await tester.tap(find.byKey(const ValueKey('preview-import-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('预览结果'), findsOneWidget);
+    expect(find.text('19 门'), findsOneWidget);
+    expect(find.text('2026-02-23 - 2026-03-01'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey('confirm-import-button')),
+          )
+          .onPressed,
+      isNotNull,
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('import-name-field')),
+      '导入课表-改名',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('预览结果'), findsNothing);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey('confirm-import-button')),
+          )
+          .onPressed,
+      isNull,
+    );
+  });
+
+  testWidgets('confirms preview and selects imported schedule', (tester) async {
+    final store = await _emptyStore();
+    await _pumpSchedule(tester, semester, store: store);
+    await tester.tap(find.byKey(const ValueKey('open-import-page-button')));
+    await tester.pumpAndSettle();
+    await _enterValidImportForm(tester, '导入课表');
+
+    await tester.tap(find.byKey(const ValueKey('preview-import-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('confirm-import-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('导入课表'), findsOneWidget);
+    expect(find.text('2026-02-23 - 2026-03-01'), findsOneWidget);
+    expect((await store.loadRecords()).single.displayName, '导入课表');
+  });
 }
 
 Semester _loadSampleSemester() {
-  return SemesterImporter.parseFromHtml(
+  return SemesterImporter.parseCourseHtml(
     semesterId: '2025-2026-2',
     displayName: '2025-2026-2学期',
     termStartDate: null,
     courseHtml: File('assets/raw/2025-2026-2-courses.html').readAsStringSync(),
-    periodHtml: File('assets/raw/periods.html').readAsStringSync(),
   );
 }
 
-Future<void> _pumpSchedule(WidgetTester tester, Semester semester) async {
+Future<void> _pumpSchedule(
+  WidgetTester tester,
+  Semester semester, {
+  ImportedSemesterStore? store,
+}) async {
   tester.view.physicalSize = const Size(1280, 900);
   tester.view.devicePixelRatio = 1;
   addTearDown(() {
     tester.view.resetPhysicalSize();
     tester.view.resetDevicePixelRatio();
   });
+  final importedStore = store ?? await _emptyStore();
   await tester.pumpWidget(
-    CourseScheduleApp(semestersFuture: Future.value([semester])),
+    CourseScheduleApp(
+      semestersFuture: Future.value([semester]),
+      importedSemesterStore: importedStore,
+    ),
   );
   await tester.pumpAndSettle();
+}
+
+Future<void> _enterValidImportForm(
+  WidgetTester tester,
+  String displayName,
+) async {
+  await tester.enterText(
+    find.byKey(const ValueKey('import-name-field')),
+    displayName,
+  );
+  await tester.enterText(
+    find.byKey(const ValueKey('import-date-field')),
+    '2026-02-23',
+  );
+  await tester.enterText(
+    find.byKey(const ValueKey('import-html-field')),
+    File('assets/raw/2025-2026-2-courses.html').readAsStringSync(),
+  );
+}
+
+Future<ImportedSemesterStore> _emptyStore() async {
+  SharedPreferences.setMockInitialValues({});
+  final preferences = await SharedPreferences.getInstance();
+  return ImportedSemesterStore(preferences: preferences);
 }

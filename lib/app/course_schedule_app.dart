@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
 
+import 'import_schedule_page.dart';
 import '../models/schedule_models.dart';
+import '../services/imported_semester_store.dart';
 import '../services/sample_semester_loader.dart';
 
 class CourseScheduleApp extends StatelessWidget {
-  const CourseScheduleApp({super.key, this.semestersFuture});
+  const CourseScheduleApp({
+    super.key,
+    this.semestersFuture,
+    this.importedSemesterStore,
+  });
 
   final Future<List<Semester>>? semestersFuture;
+  final ImportedSemesterStore? importedSemesterStore;
 
   @override
   Widget build(BuildContext context) {
@@ -18,23 +25,39 @@ class CourseScheduleApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0F766E)),
         scaffoldBackgroundColor: const Color(0xFFF6F7F9),
       ),
-      home: _SemesterBootstrap(semestersFuture: semestersFuture),
+      home: _SemesterBootstrap(
+        semestersFuture: semestersFuture,
+        importedSemesterStore: importedSemesterStore,
+      ),
     );
   }
 }
 
 class _SemesterBootstrap extends StatefulWidget {
-  const _SemesterBootstrap({required this.semestersFuture});
+  const _SemesterBootstrap({
+    required this.semestersFuture,
+    required this.importedSemesterStore,
+  });
 
   final Future<List<Semester>>? semestersFuture;
+  final ImportedSemesterStore? importedSemesterStore;
 
   @override
   State<_SemesterBootstrap> createState() => _SemesterBootstrapState();
 }
 
 class _SemesterBootstrapState extends State<_SemesterBootstrap> {
-  late final Future<List<Semester>> _semestersFuture =
-      widget.semestersFuture ?? const SampleSemesterLoader().load();
+  late final ImportedSemesterStore _importedSemesterStore =
+      widget.importedSemesterStore ?? ImportedSemesterStore();
+  late Future<List<Semester>> _semestersFuture = _loadSemesters();
+  String? _selectedSemesterId;
+
+  Future<List<Semester>> _loadSemesters() async {
+    final bundled =
+        await (widget.semestersFuture ?? const SampleSemesterLoader().load());
+    final imported = await _importedSemesterStore.loadSemesters();
+    return [...bundled, ...imported];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,28 +74,73 @@ class _SemesterBootstrapState extends State<_SemesterBootstrap> {
         if (semesters.isEmpty) {
           return const _ErrorScreen(message: '没有可显示的学期数据');
         }
-        return ScheduleHome(semesters: semesters);
+        return ScheduleHome(
+          semesters: semesters,
+          selectedSemesterId: _selectedSemesterId,
+          onImportRequested: () => _openImportPage(semesters),
+        );
       },
     );
+  }
+
+  Future<void> _openImportPage(List<Semester> semesters) async {
+    final importedId = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (context) => ImportSchedulePage(
+          existingDisplayNames: [
+            for (final semester in semesters) semester.displayName,
+          ],
+          store: _importedSemesterStore,
+        ),
+      ),
+    );
+    if (importedId == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _selectedSemesterId = importedId;
+      _semestersFuture = _loadSemesters();
+    });
   }
 }
 
 class ScheduleHome extends StatefulWidget {
-  const ScheduleHome({super.key, required this.semesters});
+  const ScheduleHome({
+    super.key,
+    required this.semesters,
+    this.selectedSemesterId,
+    this.onImportRequested,
+  });
 
   final List<Semester> semesters;
+  final String? selectedSemesterId;
+  final VoidCallback? onImportRequested;
 
   @override
   State<ScheduleHome> createState() => _ScheduleHomeState();
 }
 
 class _ScheduleHomeState extends State<ScheduleHome> {
-  late Semester _selectedSemester = widget.semesters.first;
+  late Semester _selectedSemester;
   int _selectedWeek = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedSemester =
+        _semesterForId(widget.selectedSemesterId) ?? widget.semesters.first;
+  }
 
   @override
   void didUpdateWidget(covariant ScheduleHome oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final requestedSemester = _semesterForId(widget.selectedSemesterId);
+    if (widget.selectedSemesterId != oldWidget.selectedSemesterId &&
+        requestedSemester != null) {
+      _selectedSemester = requestedSemester;
+      _selectedWeek = 1;
+      return;
+    }
     if (!widget.semesters.any(
       (semester) => semester.id == _selectedSemester.id,
     )) {
@@ -92,6 +160,17 @@ class _ScheduleHomeState extends State<ScheduleHome> {
         centerTitle: false,
         surfaceTintColor: Colors.transparent,
         backgroundColor: Colors.white,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 10),
+            child: TextButton.icon(
+              key: const ValueKey('open-import-page-button'),
+              onPressed: widget.onImportRequested,
+              icon: const Icon(Icons.upload_file),
+              label: const Text('导入'),
+            ),
+          ),
+        ],
       ),
       body: SafeArea(
         child: LayoutBuilder(
@@ -138,6 +217,18 @@ class _ScheduleHomeState extends State<ScheduleHome> {
       builder: (context) =>
           _CourseDetailDialog(course: course, session: session),
     );
+  }
+
+  Semester? _semesterForId(String? id) {
+    if (id == null) {
+      return null;
+    }
+    for (final semester in widget.semesters) {
+      if (semester.id == id) {
+        return semester;
+      }
+    }
+    return null;
   }
 }
 

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:course_schedule/services/default_periods.dart';
 import 'package:course_schedule/services/semester_importer.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -11,6 +12,45 @@ void main() {
     courseHtml: File('assets/raw/2025-2026-2-courses.html').readAsStringSync(),
     periodHtml: File('assets/raw/periods.html').readAsStringSync(),
   );
+
+  test('default periods are hardcoded and reusable', () {
+    expect(DefaultPeriods.all, hasLength(48));
+    final morning = DefaultPeriods.all.firstWhere(
+      (period) => period.name == '上午12节',
+    );
+    expect(morning.sections, ['第1节', '第2节']);
+    expect(morning.startTime, '08:30');
+    expect(morning.endTime, '10:10');
+
+    final noon = DefaultPeriods.all.firstWhere(
+      (period) => period.name == '中午1-2节',
+    );
+    expect(noon.sections, ['中午1节', '中午2节']);
+
+    final evening = DefaultPeriods.all.firstWhere(
+      (period) => period.name == '晚9-11节',
+    );
+    expect(evening.sections, ['第9节', '第10节', '第11节']);
+  });
+
+  test('parses bundled sample from course html only', () {
+    final courseOnlySemester = SemesterImporter.parseCourseHtml(
+      semesterId: 'course-only',
+      displayName: '课程HTML导入',
+      termStartDate: DateTime(2026, 2, 23),
+      courseHtml: File(
+        'assets/raw/2025-2026-2-courses.html',
+      ).readAsStringSync(),
+    );
+
+    expect(courseOnlySemester.courses, hasLength(19));
+    expect(courseOnlySemester.periods, hasLength(48));
+    expect(
+      courseOnlySemester.dateRangeForWeek(1)!.start,
+      DateTime(2026, 2, 23),
+    );
+    expect(courseOnlySemester.dateRangeForWeek(1)!.end, DateTime(2026, 3, 1));
+  });
 
   test('parses bundled sample counts', () {
     expect(semester.courses, hasLength(19));
