@@ -609,6 +609,7 @@ class _PositionedCourseBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _courseColor(scheduled.course.name);
+    final background = _courseBackgroundColor(color);
     final session = scheduled.session;
     return Positioned(
       left: left,
@@ -616,7 +617,7 @@ class _PositionedCourseBlock extends StatelessWidget {
       width: width,
       height: height,
       child: Material(
-        color: color.withValues(alpha: 0.12),
+        color: background,
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
           onTap: onTap,
@@ -920,6 +921,10 @@ Color _courseColor(String key) {
   ];
   final hash = key.runes.fold<int>(0, (value, rune) => value + rune);
   return colors[hash % colors.length];
+}
+
+Color _courseBackgroundColor(Color color) {
+  return Color.alphaBlend(color.withValues(alpha: 0.12), Colors.white);
 }
 
 bool _hasAnyLink(Course course) =>
