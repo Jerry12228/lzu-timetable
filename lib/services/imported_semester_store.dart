@@ -64,6 +64,8 @@ class ImportedSemesterStore {
           : Future.value(preferences);
 
   static const _recordsKey = 'course_schedule_imported_semesters_v1';
+  static const _hiddenBundledIdsKey =
+      'course_schedule_hidden_bundled_semester_ids_v1';
 
   final Future<SharedPreferences> _preferencesFuture;
 
@@ -82,7 +84,28 @@ class ImportedSemesterStore {
     return records.map((record) => record.toSemester()).toList();
   }
 
+  Future<Set<String>> loadHiddenBundledSemesterIds() async {
+    final preferences = await _preferencesFuture;
+    return (preferences.getStringList(_hiddenBundledIdsKey) ?? const [])
+        .toSet();
+  }
+
   Future<ImportedSemesterRecord> addRecord({
+    required String displayName,
+    required DateTime termStartDate,
+    required String courseHtml,
+    required Iterable<String> existingDisplayNames,
+  }) async {
+    return saveRecord(
+      displayName: displayName,
+      termStartDate: termStartDate,
+      courseHtml: courseHtml,
+      existingDisplayNames: existingDisplayNames,
+    );
+  }
+
+  Future<ImportedSemesterRecord> saveRecord({
+    String? semesterId,
     required String displayName,
     required DateTime termStartDate,
     required String courseHtml,
@@ -93,9 +116,13 @@ class ImportedSemesterStore {
       throw const FormatException('请输入课表名称');
     }
     final records = await loadRecords();
+    final existingIndex = semesterId == null
+        ? -1
+        : records.indexWhere((record) => record.id == semesterId);
     final names = {
       for (final name in existingDisplayNames) name.trim(),
-      for (final record in records) record.displayName.trim(),
+      for (final record in records)
+        if (record.id != semesterId) record.displayName.trim(),
     };
     if (names.contains(normalizedName)) {
       throw DuplicateSemesterNameException(normalizedName);
@@ -103,14 +130,33 @@ class ImportedSemesterStore {
 
     final now = DateTime.now();
     final record = ImportedSemesterRecord(
-      id: 'imported-${now.microsecondsSinceEpoch}',
+      id: semesterId ?? 'imported-${now.microsecondsSinceEpoch}',
       displayName: normalizedName,
       termStartDate: termStartDate,
       courseHtml: courseHtml,
-      createdAt: now,
+      createdAt: existingIndex == -1 ? now : records[existingIndex].createdAt,
     );
-    await _writeRecords([...records, record]);
+    final updatedRecords = [...records];
+    if (existingIndex == -1) {
+      updatedRecords.add(record);
+    } else {
+      updatedRecords[existingIndex] = record;
+    }
+    await _writeRecords(updatedRecords);
     return record;
+  }
+
+  Future<void> deleteSemester(String semesterId) async {
+    final records = await loadRecords();
+    await _writeRecords(
+      records.where((record) => record.id != semesterId).toList(),
+    );
+
+    final preferences = await _preferencesFuture;
+    final hiddenIds =
+        (preferences.getStringList(_hiddenBundledIdsKey) ?? const []).toSet()
+          ..add(semesterId);
+    await preferences.setStringList(_hiddenBundledIdsKey, hiddenIds.toList());
   }
 
   Future<void> _writeRecords(List<ImportedSemesterRecord> records) async {

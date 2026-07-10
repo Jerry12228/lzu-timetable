@@ -153,6 +153,7 @@ class Semester {
     required this.termStartDate,
     required this.courses,
     required this.periods,
+    this.sourceCourseHtml,
   });
 
   final String id;
@@ -160,6 +161,7 @@ class Semester {
   final DateTime? termStartDate;
   final List<Course> courses;
   final List<PeriodDefinition> periods;
+  final String? sourceCourseHtml;
 
   int get maxWeek {
     var maxWeek = 1;

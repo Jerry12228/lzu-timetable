@@ -13,10 +13,20 @@ class ImportSchedulePage extends StatefulWidget {
     super.key,
     required this.existingDisplayNames,
     required this.store,
+    this.editingSemesterId,
+    this.initialDisplayName,
+    this.initialTermStartDate,
+    this.initialCourseHtml,
   });
 
   final List<String> existingDisplayNames;
   final ImportedSemesterStore store;
+  final String? editingSemesterId;
+  final String? initialDisplayName;
+  final DateTime? initialTermStartDate;
+  final String? initialCourseHtml;
+
+  bool get isEditing => editingSemesterId != null;
 
   @override
   State<ImportSchedulePage> createState() => _ImportSchedulePageState();
@@ -36,6 +46,12 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
   @override
   void initState() {
     super.initState();
+    _nameController.text = widget.initialDisplayName ?? '';
+    final initialDate = widget.initialTermStartDate;
+    if (initialDate != null) {
+      _dateController.text = _formatDate(initialDate);
+    }
+    _htmlController.text = widget.initialCourseHtml ?? '';
     _nameController.addListener(_invalidatePreview);
     _dateController.addListener(_invalidatePreview);
     _htmlController.addListener(_invalidatePreview);
@@ -55,7 +71,7 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
     final hasValidPreview = preview != null && _previewKey == _currentInputKey;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('导入课程表'),
+        title: Text(widget.isEditing ? '修改课程表' : '添加课程表'),
         backgroundColor: Colors.white,
         surfaceTintColor: Colors.transparent,
       ),
@@ -121,10 +137,14 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
                       FilledButton.icon(
                         key: const ValueKey('confirm-import-button'),
                         onPressed: hasValidPreview && !_isSaving
-                            ? () => _confirmImport(preview)
+                            ? () => _confirmSchedule(preview)
                             : null,
-                        icon: const Icon(Icons.add),
-                        label: Text(_isSaving ? '添加中...' : '确认添加'),
+                        icon: Icon(widget.isEditing ? Icons.save : Icons.add),
+                        label: Text(
+                          _isSaving
+                              ? (widget.isEditing ? '保存中...' : '添加中...')
+                              : (widget.isEditing ? '保存修改' : '确认添加'),
+                        ),
                       ),
                     ],
                   ),
@@ -218,7 +238,7 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
     }
   }
 
-  Future<void> _confirmImport(Semester preview) async {
+  Future<void> _confirmSchedule(Semester preview) async {
     setState(() {
       _isSaving = true;
       _errorMessage = null;
@@ -226,7 +246,8 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
     try {
       final displayName = _validatedDisplayName();
       final termStartDate = _validatedStartDate();
-      final record = await widget.store.addRecord(
+      final record = await widget.store.saveRecord(
+        semesterId: widget.editingSemesterId,
         displayName: displayName,
         termStartDate: termStartDate,
         courseHtml: _htmlController.text,

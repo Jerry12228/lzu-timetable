@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'import_schedule_page.dart';
+import 'course_schedule_management_page.dart';
 import 'timetable_grid.dart';
 import '../models/schedule_models.dart';
 import '../services/imported_semester_store.dart';
@@ -53,11 +53,22 @@ class _SemesterBootstrapState extends State<_SemesterBootstrap> {
   late Future<List<Semester>> _semestersFuture = _loadSemesters();
   String? _selectedSemesterId;
 
+  Future<List<Semester>> _loadBundledSemesters() =>
+      widget.semestersFuture ?? const SampleSemesterLoader().load();
+
   Future<List<Semester>> _loadSemesters() async {
-    final bundled =
-        await (widget.semestersFuture ?? const SampleSemesterLoader().load());
+    final bundled = await _loadBundledSemesters();
     final imported = await _importedSemesterStore.loadSemesters();
-    return [...bundled, ...imported];
+    final hiddenBundledIds = await _importedSemesterStore
+        .loadHiddenBundledSemesterIds();
+    final importedIds = {for (final semester in imported) semester.id};
+    return [
+      for (final semester in bundled)
+        if (!hiddenBundledIds.contains(semester.id) &&
+            !importedIds.contains(semester.id))
+          semester,
+      ...imported,
+    ];
   }
 
   @override
@@ -73,33 +84,34 @@ class _SemesterBootstrapState extends State<_SemesterBootstrap> {
         }
         final semesters = snapshot.data ?? const [];
         if (semesters.isEmpty) {
-          return const _ErrorScreen(message: '没有可显示的学期数据');
+          return _EmptyScheduleScreen(onManageRequested: _openManagementPage);
         }
         return ScheduleHome(
           semesters: semesters,
           selectedSemesterId: _selectedSemesterId,
-          onImportRequested: () => _openImportPage(semesters),
+          onManageRequested: _openManagementPage,
         );
       },
     );
   }
 
-  Future<void> _openImportPage(List<Semester> semesters) async {
-    final importedId = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder: (context) => ImportSchedulePage(
-          existingDisplayNames: [
-            for (final semester in semesters) semester.displayName,
-          ],
-          store: _importedSemesterStore,
-        ),
-      ),
-    );
-    if (importedId == null || !mounted) {
+  Future<void> _openManagementPage() async {
+    final result = await Navigator.of(context)
+        .push<CourseScheduleManagementResult>(
+          MaterialPageRoute(
+            builder: (context) => CourseScheduleManagementPage(
+              store: _importedSemesterStore,
+              loadSemesters: _loadSemesters,
+            ),
+          ),
+        );
+    if (result == null || !result.changed || !mounted) {
       return;
     }
     setState(() {
-      _selectedSemesterId = importedId;
+      if (result.selectedSemesterId != null) {
+        _selectedSemesterId = result.selectedSemesterId;
+      }
       _semestersFuture = _loadSemesters();
     });
   }
@@ -110,12 +122,12 @@ class ScheduleHome extends StatefulWidget {
     super.key,
     required this.semesters,
     this.selectedSemesterId,
-    this.onImportRequested,
+    this.onManageRequested,
   });
 
   final List<Semester> semesters;
   final String? selectedSemesterId;
-  final VoidCallback? onImportRequested;
+  final VoidCallback? onManageRequested;
 
   @override
   State<ScheduleHome> createState() => _ScheduleHomeState();
@@ -165,10 +177,10 @@ class _ScheduleHomeState extends State<ScheduleHome> {
           Padding(
             padding: const EdgeInsets.only(right: 10),
             child: TextButton.icon(
-              key: const ValueKey('open-import-page-button'),
-              onPressed: widget.onImportRequested,
-              icon: const Icon(Icons.upload_file),
-              label: const Text('导入'),
+              key: const ValueKey('open-manage-schedules-button'),
+              onPressed: widget.onManageRequested,
+              icon: const Icon(Icons.settings_outlined),
+              label: const Text('管理'),
             ),
           ),
         ],
@@ -559,6 +571,40 @@ class _ErrorScreen extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Text(message, textAlign: TextAlign.center),
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyScheduleScreen extends StatelessWidget {
+  const _EmptyScheduleScreen({required this.onManageRequested});
+
+  final VoidCallback onManageRequested;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('课程表'),
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('还没有课程表'),
+              const SizedBox(height: 14),
+              FilledButton.icon(
+                onPressed: onManageRequested,
+                icon: const Icon(Icons.settings_outlined),
+                label: const Text('管理课程表'),
+              ),
+            ],
+          ),
         ),
       ),
     );

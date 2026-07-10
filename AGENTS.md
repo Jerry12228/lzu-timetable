@@ -29,6 +29,7 @@
 - Add tests for every supported week expression and timetable mapping rule.
 - Treat courses with no fixed schedule as valid parsed data, but do not place them in the weekly grid unless a product requirement asks for a separate display.
 - Keep responsive layout usable on PC Web, mobile Web, and Android phones.
+- Keep course schedule creation, editing, and deletion in the dedicated management page; the timetable home remains a viewing surface.
 
 ## Git Workflow
 

@@ -34,7 +34,7 @@ void main() {
 
     expect(find.text('课程表'), findsOneWidget);
     expect(
-      find.byKey(const ValueKey('open-import-page-button')),
+      find.byKey(const ValueKey('open-manage-schedules-button')),
       findsOneWidget,
     );
     expect(find.text('2025-2026-2学期'), findsOneWidget);
@@ -72,23 +72,41 @@ void main() {
     expect(find.text('关闭'), findsOneWidget);
   });
 
-  testWidgets('opens standalone import page', (tester) async {
+  testWidgets('opens the schedule management page', (tester) async {
     await _pumpSchedule(tester, semester);
 
-    await tester.tap(find.byKey(const ValueKey('open-import-page-button')));
+    await tester.tap(
+      find.byKey(const ValueKey('open-manage-schedules-button')),
+    );
     await tester.pumpAndSettle();
 
-    expect(find.text('导入课程表'), findsOneWidget);
-    expect(find.byKey(const ValueKey('import-name-field')), findsOneWidget);
-    expect(find.byKey(const ValueKey('import-html-field')), findsOneWidget);
+    expect(find.text('管理课程表'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('manage-add-schedule-button')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('open-import-page-button')), findsNothing);
+  });
+
+  testWidgets('keeps the schedule management page usable on Android width', (
+    tester,
+  ) async {
+    await _pumpSchedule(tester, semester, size: const Size(390, 844));
+    await _openManagementPage(tester);
+
+    expect(find.text('管理课程表'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('manage-add-schedule-button')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('validates required import fields before preview', (
     tester,
   ) async {
     await _pumpSchedule(tester, semester);
-    await tester.tap(find.byKey(const ValueKey('open-import-page-button')));
-    await tester.pumpAndSettle();
+    await _openScheduleEditor(tester);
 
     await tester.tap(find.byKey(const ValueKey('preview-import-button')));
     await tester.pumpAndSettle();
@@ -98,8 +116,7 @@ void main() {
 
   testWidgets('rejects duplicate imported schedule names', (tester) async {
     await _pumpSchedule(tester, semester);
-    await tester.tap(find.byKey(const ValueKey('open-import-page-button')));
-    await tester.pumpAndSettle();
+    await _openScheduleEditor(tester);
 
     await tester.enterText(
       find.byKey(const ValueKey('import-name-field')),
@@ -123,8 +140,7 @@ void main() {
     tester,
   ) async {
     await _pumpSchedule(tester, semester);
-    await tester.tap(find.byKey(const ValueKey('open-import-page-button')));
-    await tester.pumpAndSettle();
+    await _openScheduleEditor(tester);
     await _enterValidImportForm(tester, '导入课表');
 
     await tester.tap(find.byKey(const ValueKey('preview-import-button')));
@@ -168,8 +184,7 @@ void main() {
 
   testWidgets('switches week inside import preview timetable', (tester) async {
     await _pumpSchedule(tester, semester);
-    await tester.tap(find.byKey(const ValueKey('open-import-page-button')));
-    await tester.pumpAndSettle();
+    await _openScheduleEditor(tester);
     await _enterValidImportForm(tester, '导入课表');
 
     await tester.tap(find.byKey(const ValueKey('preview-import-button')));
@@ -196,8 +211,7 @@ void main() {
   testWidgets('confirms preview and selects imported schedule', (tester) async {
     final store = await _emptyStore();
     await _pumpSchedule(tester, semester, store: store);
-    await tester.tap(find.byKey(const ValueKey('open-import-page-button')));
-    await tester.pumpAndSettle();
+    await _openScheduleEditor(tester);
     await _enterValidImportForm(tester, '导入课表');
 
     await tester.tap(find.byKey(const ValueKey('preview-import-button')));
@@ -206,9 +220,80 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('导入课表'), findsOneWidget);
+    expect(find.text('2026-02-23起 · 19 门课程'), findsWidgets);
+    expect((await store.loadRecords()).single.displayName, '导入课表');
+
+    await tester.tap(find.byTooltip('返回课程表'));
+    await tester.pumpAndSettle();
+
     expect(find.text('02-23'), findsWidgets);
     expect(find.text('2026-02-23 - 2026-03-01'), findsNothing);
-    expect((await store.loadRecords()).single.displayName, '导入课表');
+  });
+
+  testWidgets('edits an imported schedule in the management page', (
+    tester,
+  ) async {
+    final store = await _emptyStore();
+    final record = await store.addRecord(
+      displayName: '待修改课表',
+      termStartDate: DateTime(2026, 2, 23),
+      courseHtml: File(
+        'assets/raw/2025-2026-2-courses.html',
+      ).readAsStringSync(),
+      existingDisplayNames: const ['2025-2026-2学期'],
+    );
+    await _pumpSchedule(tester, semester, store: store);
+    await _openManagementPage(tester);
+
+    await tester.tap(find.byKey(ValueKey('edit-schedule-${record.id}')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('修改课程表'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const ValueKey('import-name-field')))
+          .controller!
+          .text,
+      '待修改课表',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('import-name-field')),
+      '已修改课表',
+    );
+    await tester.tap(find.byKey(const ValueKey('preview-import-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('confirm-import-button')));
+    await tester.pumpAndSettle();
+
+    final records = await store.loadRecords();
+    expect(records, hasLength(1));
+    expect(records.single.id, record.id);
+    expect(records.single.displayName, '已修改课表');
+    expect(find.text('已修改课表'), findsOneWidget);
+  });
+
+  testWidgets('deletes an imported schedule in the management page', (
+    tester,
+  ) async {
+    final store = await _emptyStore();
+    final record = await store.addRecord(
+      displayName: '待删除课表',
+      termStartDate: DateTime(2026, 2, 23),
+      courseHtml: File(
+        'assets/raw/2025-2026-2-courses.html',
+      ).readAsStringSync(),
+      existingDisplayNames: const ['2025-2026-2学期'],
+    );
+    await _pumpSchedule(tester, semester, store: store);
+    await _openManagementPage(tester);
+
+    await tester.tap(find.byKey(ValueKey('delete-schedule-${record.id}')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '删除'));
+    await tester.pumpAndSettle();
+
+    expect(await store.loadRecords(), isEmpty);
+    expect(find.text('待删除课表'), findsNothing);
   });
 }
 
@@ -259,6 +344,17 @@ Future<void> _enterValidImportForm(
     find.byKey(const ValueKey('import-html-field')),
     File('assets/raw/2025-2026-2-courses.html').readAsStringSync(),
   );
+}
+
+Future<void> _openManagementPage(WidgetTester tester) async {
+  await tester.tap(find.byKey(const ValueKey('open-manage-schedules-button')));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _openScheduleEditor(WidgetTester tester) async {
+  await _openManagementPage(tester);
+  await tester.tap(find.byKey(const ValueKey('manage-add-schedule-button')));
+  await tester.pumpAndSettle();
 }
 
 Future<ImportedSemesterStore> _emptyStore() async {

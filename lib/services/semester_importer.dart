@@ -22,6 +22,7 @@ class SemesterImporter {
       termStartDate: termStartDate,
       courses: courses,
       periods: periods,
+      sourceCourseHtml: courseHtml,
     );
   }
 
@@ -38,6 +39,7 @@ class SemesterImporter {
       termStartDate: termStartDate,
       courses: courses,
       periods: DefaultPeriods.all,
+      sourceCourseHtml: courseHtml,
     );
   }
 

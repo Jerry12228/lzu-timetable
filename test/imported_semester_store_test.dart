@@ -47,4 +47,33 @@ void main() {
 
     expect(await store.loadRecords(), isEmpty);
   });
+
+  test('updates and deletes course schedules persistently', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final store = ImportedSemesterStore(preferences: preferences);
+    final html = File('assets/raw/2025-2026-2-courses.html').readAsStringSync();
+
+    final added = await store.addRecord(
+      displayName: '原课表',
+      termStartDate: DateTime(2026, 2, 23),
+      courseHtml: html,
+      existingDisplayNames: const ['2025-2026-2学期'],
+    );
+    final updated = await store.saveRecord(
+      semesterId: added.id,
+      displayName: '修改后的课表',
+      termStartDate: DateTime(2026, 3, 2),
+      courseHtml: html,
+      existingDisplayNames: const ['2025-2026-2学期'],
+    );
+
+    expect(updated.id, added.id);
+    expect((await store.loadRecords()).single.displayName, '修改后的课表');
+
+    await store.deleteSemester(added.id);
+
+    expect(await store.loadRecords(), isEmpty);
+    expect(await store.loadHiddenBundledSemesterIds(), contains(added.id));
+  });
 }
