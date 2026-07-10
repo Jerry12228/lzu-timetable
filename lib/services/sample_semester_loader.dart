@@ -14,7 +14,7 @@ class SampleSemesterLoader {
       SemesterImporter.parseCourseHtml(
         semesterId: '2025-2026-2',
         displayName: '2025-2026-2学期',
-        termStartDate: null,
+        termStartDate: DateTime(2026, 2, 23),
         courseHtml: courseHtml,
       ),
     ];
