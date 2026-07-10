@@ -360,45 +360,48 @@ class _MobileScheduleMenu extends StatelessWidget {
       tooltip: '课程表菜单',
       icon: const Icon(Icons.menu),
       onSelected: (action) {
-        if (action.opensManagement) {
-          onManageRequested?.call();
-          return;
-        }
-        final semester = action.semester;
-        if (semester != null) {
-          onSemesterChanged(semester);
+        switch (action) {
+          case _MobileScheduleMenuAction.chooseSemester:
+            _showSemesterPicker(context);
+          case _MobileScheduleMenuAction.management:
+            onManageRequested?.call();
         }
       },
       itemBuilder: (context) => [
-        const PopupMenuItem(
-          enabled: false,
-          child: Text('学期', style: TextStyle(fontWeight: FontWeight.w700)),
-        ),
-        for (final semester in semesters)
-          PopupMenuItem(
-            value: _MobileScheduleMenuAction.semester(semester),
+        PopupMenuItem(
+          value: _MobileScheduleMenuAction.chooseSemester,
+          child: SizedBox(
+            width: 240,
             child: Row(
               children: [
-                SizedBox(
-                  width: 24,
-                  child: semester.id == selectedSemester.id
-                      ? const Icon(Icons.check, size: 18)
-                      : null,
-                ),
-                const SizedBox(width: 8),
+                const Icon(Icons.calendar_month_outlined),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
-                    semester.displayName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('学期'),
+                      Text(
+                        selectedSemester.displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.black54,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+                const Icon(Icons.chevron_right),
               ],
             ),
           ),
+        ),
         const PopupMenuDivider(),
         const PopupMenuItem(
-          value: _MobileScheduleMenuAction.management(),
+          value: _MobileScheduleMenuAction.management,
           child: Row(
             children: [
               Icon(Icons.settings_outlined),
@@ -410,18 +413,76 @@ class _MobileScheduleMenu extends StatelessWidget {
       ],
     );
   }
+
+  Future<void> _showSemesterPicker(BuildContext context) async {
+    final semester = await showModalBottomSheet<Semester>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _MobileSemesterPicker(
+        semesters: semesters,
+        selectedSemester: selectedSemester,
+      ),
+    );
+    if (semester != null) {
+      onSemesterChanged(semester);
+    }
+  }
 }
 
-class _MobileScheduleMenuAction {
-  const _MobileScheduleMenuAction.semester(this.semester)
-    : opensManagement = false;
+enum _MobileScheduleMenuAction { chooseSemester, management }
 
-  const _MobileScheduleMenuAction.management()
-    : semester = null,
-      opensManagement = true;
+class _MobileSemesterPicker extends StatelessWidget {
+  const _MobileSemesterPicker({
+    required this.semesters,
+    required this.selectedSemester,
+  });
 
-  final Semester? semester;
-  final bool opensManagement;
+  final List<Semester> semesters;
+  final Semester selectedSemester;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: FractionallySizedBox(
+        heightFactor: 0.65,
+        child: Column(
+          children: [
+            const SizedBox(height: 10),
+            const Text(
+              '选择学期',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: RadioGroup<String>(
+                groupValue: selectedSemester.id,
+                onChanged: (id) {
+                  if (id == null) {
+                    return;
+                  }
+                  Navigator.of(
+                    context,
+                  ).pop(semesters.firstWhere((semester) => semester.id == id));
+                },
+                child: ListView.builder(
+                  key: const ValueKey('mobile-semester-picker'),
+                  itemCount: semesters.length,
+                  itemBuilder: (context, index) {
+                    final semester = semesters[index];
+                    return RadioListTile<String>(
+                      value: semester.id,
+                      title: Text(semester.displayName),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _SemesterDropdown extends StatelessWidget {

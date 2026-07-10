@@ -50,8 +50,18 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('mobile-schedule-menu-button')));
     await tester.pumpAndSettle();
 
-    expect(find.text('2025-2026-2学期'), findsOneWidget);
+    expect(find.text('学期'), findsOneWidget);
     expect(find.text('管理课程表'), findsOneWidget);
+
+    await tester.tap(find.text('学期'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('选择学期'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('mobile-semester-picker')),
+      findsOneWidget,
+    );
+    expect(find.text('2025-2026-2学期'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
