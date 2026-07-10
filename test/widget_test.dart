@@ -34,15 +34,24 @@ void main() {
 
     expect(find.text('课程表'), findsOneWidget);
     expect(
-      find.byKey(const ValueKey('open-manage-schedules-button')),
+      find.byKey(const ValueKey('mobile-schedule-menu-button')),
       findsOneWidget,
     );
-    expect(find.text('2025-2026-2学期'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('open-manage-schedules-button')),
+      findsNothing,
+    );
     expect(find.textContaining('开学日期未配置'), findsNothing);
     expect(find.text('节次'), findsOneWidget);
     expect(find.text('星期一'), findsOneWidget);
     expect(find.text('02-23'), findsOneWidget);
     expect(find.text('第1节'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('mobile-schedule-menu-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2025-2026-2学期'), findsOneWidget);
+    expect(find.text('管理课程表'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -353,7 +362,16 @@ Future<void> _enterValidImportForm(
 }
 
 Future<void> _openManagementPage(WidgetTester tester) async {
-  await tester.tap(find.byKey(const ValueKey('open-manage-schedules-button')));
+  final mobileMenu = find.byKey(const ValueKey('mobile-schedule-menu-button'));
+  if (mobileMenu.evaluate().isNotEmpty) {
+    await tester.tap(mobileMenu);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('管理课程表'));
+  } else {
+    await tester.tap(
+      find.byKey(const ValueKey('open-manage-schedules-button')),
+    );
+  }
   await tester.pumpAndSettle();
 }
 

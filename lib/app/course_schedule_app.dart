@@ -167,6 +167,7 @@ class _ScheduleHomeState extends State<ScheduleHome> {
 
   @override
   Widget build(BuildContext context) {
+    final mobile = MediaQuery.sizeOf(context).width < 600;
     return Scaffold(
       appBar: AppBar(
         title: const Text('课程表'),
@@ -174,15 +175,23 @@ class _ScheduleHomeState extends State<ScheduleHome> {
         surfaceTintColor: Colors.transparent,
         backgroundColor: Colors.white,
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 10),
-            child: TextButton.icon(
-              key: const ValueKey('open-manage-schedules-button'),
-              onPressed: widget.onManageRequested,
-              icon: const Icon(Icons.settings_outlined),
-              label: const Text('管理'),
+          if (mobile)
+            _MobileScheduleMenu(
+              semesters: widget.semesters,
+              selectedSemester: _selectedSemester,
+              onSemesterChanged: _selectSemester,
+              onManageRequested: widget.onManageRequested,
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.only(right: 10),
+              child: TextButton.icon(
+                key: const ValueKey('open-manage-schedules-button'),
+                onPressed: widget.onManageRequested,
+                icon: const Icon(Icons.settings_outlined),
+                label: const Text('管理'),
+              ),
             ),
-          ),
         ],
       ),
       body: SafeArea(
@@ -196,6 +205,7 @@ class _ScheduleHomeState extends State<ScheduleHome> {
               children: [
                 _ScheduleControls(
                   compact: compact,
+                  showSemesterSelector: !mobile,
                   semesters: widget.semesters,
                   selectedSemester: _selectedSemester,
                   selectedWeek: _selectedWeek,
@@ -251,6 +261,7 @@ class _ScheduleHomeState extends State<ScheduleHome> {
 class _ScheduleControls extends StatelessWidget {
   const _ScheduleControls({
     required this.compact,
+    required this.showSemesterSelector,
     required this.semesters,
     required this.selectedSemester,
     required this.selectedWeek,
@@ -259,6 +270,7 @@ class _ScheduleControls extends StatelessWidget {
   });
 
   final bool compact;
+  final bool showSemesterSelector;
   final List<Semester> semesters;
   final Semester selectedSemester;
   final int selectedWeek;
@@ -288,12 +300,13 @@ class _ScheduleControls extends StatelessWidget {
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _SemesterDropdown(
-                  semesters: semesters,
-                  selectedSemester: selectedSemester,
-                  onChanged: onSemesterChanged,
-                ),
-                const SizedBox(height: 10),
+                if (showSemesterSelector)
+                  _SemesterDropdown(
+                    semesters: semesters,
+                    selectedSemester: selectedSemester,
+                    onChanged: onSemesterChanged,
+                  ),
+                if (showSemesterSelector) const SizedBox(height: 10),
                 _WeekDropdown(
                   maxWeek: selectedSemester.maxWeek,
                   selectedWeek: selectedWeek,
@@ -303,15 +316,16 @@ class _ScheduleControls extends StatelessWidget {
             )
           : Row(
               children: [
-                SizedBox(
-                  width: 260,
-                  child: _SemesterDropdown(
-                    semesters: semesters,
-                    selectedSemester: selectedSemester,
-                    onChanged: onSemesterChanged,
+                if (showSemesterSelector)
+                  SizedBox(
+                    width: 260,
+                    child: _SemesterDropdown(
+                      semesters: semesters,
+                      selectedSemester: selectedSemester,
+                      onChanged: onSemesterChanged,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
+                if (showSemesterSelector) const SizedBox(width: 12),
                 SizedBox(
                   width: 160,
                   child: _WeekDropdown(
@@ -324,6 +338,90 @@ class _ScheduleControls extends StatelessWidget {
             ),
     );
   }
+}
+
+class _MobileScheduleMenu extends StatelessWidget {
+  const _MobileScheduleMenu({
+    required this.semesters,
+    required this.selectedSemester,
+    required this.onSemesterChanged,
+    required this.onManageRequested,
+  });
+
+  final List<Semester> semesters;
+  final Semester selectedSemester;
+  final ValueChanged<Semester> onSemesterChanged;
+  final VoidCallback? onManageRequested;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<_MobileScheduleMenuAction>(
+      key: const ValueKey('mobile-schedule-menu-button'),
+      tooltip: '课程表菜单',
+      icon: const Icon(Icons.menu),
+      onSelected: (action) {
+        if (action.opensManagement) {
+          onManageRequested?.call();
+          return;
+        }
+        final semester = action.semester;
+        if (semester != null) {
+          onSemesterChanged(semester);
+        }
+      },
+      itemBuilder: (context) => [
+        const PopupMenuItem(
+          enabled: false,
+          child: Text('学期', style: TextStyle(fontWeight: FontWeight.w700)),
+        ),
+        for (final semester in semesters)
+          PopupMenuItem(
+            value: _MobileScheduleMenuAction.semester(semester),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 24,
+                  child: semester.id == selectedSemester.id
+                      ? const Icon(Icons.check, size: 18)
+                      : null,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    semester.displayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          value: _MobileScheduleMenuAction.management(),
+          child: Row(
+            children: [
+              Icon(Icons.settings_outlined),
+              SizedBox(width: 12),
+              Text('管理课程表'),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MobileScheduleMenuAction {
+  const _MobileScheduleMenuAction.semester(this.semester)
+    : opensManagement = false;
+
+  const _MobileScheduleMenuAction.management()
+    : semester = null,
+      opensManagement = true;
+
+  final Semester? semester;
+  final bool opensManagement;
 }
 
 class _SemesterDropdown extends StatelessWidget {
