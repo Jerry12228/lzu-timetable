@@ -44,8 +44,14 @@ void main() {
     expect(find.textContaining('开学日期未配置'), findsNothing);
     expect(find.text('节次'), findsOneWidget);
     expect(find.text('星期一'), findsOneWidget);
+    expect(find.text('星期日'), findsOneWidget);
     expect(find.text('02-23'), findsOneWidget);
     expect(find.text('第1节'), findsOneWidget);
+
+    final tableSize = tester.getSize(
+      find.byKey(const ValueKey('timetable-canvas')),
+    );
+    expect(tableSize.width, lessThanOrEqualTo(382));
 
     await tester.tap(find.byKey(const ValueKey('mobile-schedule-menu-button')));
     await tester.pumpAndSettle();

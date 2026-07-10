@@ -22,17 +22,17 @@ class TimetableGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final padding = compact ? 12.0 : 18.0;
-    final leftWidth = compact ? 68.0 : 86.0;
-    final minDayWidth = compact ? 124.0 : 138.0;
-
     return LayoutBuilder(
       builder: (context, constraints) {
+        final denseMobile = compact && constraints.maxWidth < 600;
+        final padding = denseMobile ? 4.0 : (compact ? 12.0 : 18.0);
+        final leftWidth = denseMobile ? 42.0 : (compact ? 68.0 : 86.0);
+        final minDayWidth = compact ? 124.0 : 138.0;
         final availableWidth = constraints.maxWidth - padding * 2;
         final minTableWidth = leftWidth + minDayWidth * weekdays.length;
-        final tableWidth = availableWidth > minTableWidth
+        final tableWidth = denseMobile
             ? availableWidth
-            : minTableWidth;
+            : (availableWidth > minTableWidth ? availableWidth : minTableWidth);
         final dayWidth = (tableWidth - leftWidth) / weekdays.length;
         final headerHeight = weekDateRange == null
             ? _headerHeight
@@ -40,29 +40,35 @@ class TimetableGrid extends StatelessWidget {
         final tableHeight =
             headerHeight + _rowHeight * _timetableSections.length;
 
+        final table = SizedBox(
+          key: const ValueKey('timetable-canvas'),
+          width: tableWidth,
+          height: tableHeight,
+          child: _TimetableCanvas(
+            leftWidth: leftWidth,
+            dayWidth: dayWidth,
+            headerHeight: headerHeight,
+            rowHeight: _rowHeight,
+            scheduled: scheduled,
+            weekDateRange: weekDateRange,
+            dense: denseMobile,
+            onCourseTap: onCourseTap,
+          ),
+        );
+
         return Scrollbar(
           child: SingleChildScrollView(
             padding: EdgeInsets.all(padding),
-            child: Scrollbar(
-              notificationPredicate: (notification) =>
-                  notification.metrics.axis == Axis.horizontal,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: SizedBox(
-                  width: tableWidth,
-                  height: tableHeight,
-                  child: _TimetableCanvas(
-                    leftWidth: leftWidth,
-                    dayWidth: dayWidth,
-                    headerHeight: headerHeight,
-                    rowHeight: _rowHeight,
-                    scheduled: scheduled,
-                    weekDateRange: weekDateRange,
-                    onCourseTap: onCourseTap,
+            child: denseMobile
+                ? table
+                : Scrollbar(
+                    notificationPredicate: (notification) =>
+                        notification.metrics.axis == Axis.horizontal,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: table,
+                    ),
                   ),
-                ),
-              ),
-            ),
           ),
         );
       },
@@ -78,6 +84,7 @@ class _TimetableCanvas extends StatelessWidget {
     required this.rowHeight,
     required this.scheduled,
     required this.weekDateRange,
+    required this.dense,
     required this.onCourseTap,
   });
 
@@ -87,12 +94,13 @@ class _TimetableCanvas extends StatelessWidget {
   final double rowHeight;
   final List<ScheduledCourse> scheduled;
   final DateRange? weekDateRange;
+  final bool dense;
   final void Function(Course course, CourseSession? session) onCourseTap;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    const courseInset = 4.0;
+    final courseInset = dense ? 2.0 : 4.0;
     final suppressedLineSegments = _suppressedLineSegmentsFor(
       scheduled: scheduled,
       dayWidth: dayWidth,
@@ -108,7 +116,7 @@ class _TimetableCanvas extends StatelessWidget {
         ),
         child: Stack(
           children: [
-            _CornerCell(width: leftWidth, height: headerHeight),
+            _CornerCell(width: leftWidth, height: headerHeight, dense: dense),
             for (var day = 0; day < weekdays.length; day++)
               _HeaderCell(
                 left: leftWidth + day * dayWidth,
@@ -116,6 +124,7 @@ class _TimetableCanvas extends StatelessWidget {
                 height: headerHeight,
                 label: weekdays[day],
                 date: weekDateRange?.start.add(Duration(days: day)),
+                dense: dense,
               ),
             for (var index = 0; index < _timetableSections.length; index++)
               _SectionCell(
@@ -123,6 +132,7 @@ class _TimetableCanvas extends StatelessWidget {
                 width: leftWidth,
                 height: rowHeight,
                 label: _timetableSections[index].label,
+                dense: dense,
               ),
             _GridLinesLayer(
               left: leftWidth,
@@ -137,10 +147,14 @@ class _TimetableCanvas extends StatelessWidget {
               if (_sectionSpanFor(item.session) case final span?)
                 _PositionedCourseBlock(
                   scheduled: item,
-                  left: leftWidth + (item.session.weekday - 1) * dayWidth + 4,
-                  top: headerHeight + span.startIndex * rowHeight + 4,
-                  width: dayWidth - 8,
-                  height: span.length * rowHeight - 8,
+                  left:
+                      leftWidth +
+                      (item.session.weekday - 1) * dayWidth +
+                      courseInset,
+                  top: headerHeight + span.startIndex * rowHeight + courseInset,
+                  width: dayWidth - courseInset * 2,
+                  height: span.length * rowHeight - courseInset * 2,
+                  dense: dense,
                   onTap: () => onCourseTap(item.course, item.session),
                 ),
           ],
@@ -151,10 +165,15 @@ class _TimetableCanvas extends StatelessWidget {
 }
 
 class _CornerCell extends StatelessWidget {
-  const _CornerCell({required this.width, required this.height});
+  const _CornerCell({
+    required this.width,
+    required this.height,
+    required this.dense,
+  });
 
   final double width;
   final double height;
+  final bool dense;
 
   @override
   Widget build(BuildContext context) {
@@ -165,7 +184,14 @@ class _CornerCell extends StatelessWidget {
       height: height,
       child: _TableCellShell(
         background: Theme.of(context).colorScheme.surfaceContainerHighest,
-        child: const Text('节次', style: TextStyle(fontWeight: FontWeight.w800)),
+        dense: dense,
+        child: Text(
+          '节次',
+          style: TextStyle(
+            fontSize: dense ? 10 : 14,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
       ),
     );
   }
@@ -178,6 +204,7 @@ class _HeaderCell extends StatelessWidget {
     required this.height,
     required this.label,
     required this.date,
+    required this.dense,
   });
 
   final double left;
@@ -185,6 +212,7 @@ class _HeaderCell extends StatelessWidget {
   final double height;
   final String label;
   final DateTime? date;
+  final bool dense;
 
   @override
   Widget build(BuildContext context) {
@@ -195,18 +223,25 @@ class _HeaderCell extends StatelessWidget {
       height: height,
       child: _TableCellShell(
         background: Theme.of(context).colorScheme.surfaceContainerHighest,
+        dense: dense,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: dense ? 10 : 14,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
             if (date != null) ...[
-              const SizedBox(height: 2),
+              SizedBox(height: dense ? 1 : 2),
               Text(
                 _formatMonthDay(date!),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 11.5,
+                style: TextStyle(
+                  fontSize: dense ? 8.5 : 11.5,
                   color: Colors.black54,
                   fontWeight: FontWeight.w600,
                 ),
@@ -225,12 +260,14 @@ class _SectionCell extends StatelessWidget {
     required this.width,
     required this.height,
     required this.label,
+    required this.dense,
   });
 
   final double top;
   final double width;
   final double height;
   final String label;
+  final bool dense;
 
   @override
   Widget build(BuildContext context) {
@@ -241,10 +278,14 @@ class _SectionCell extends StatelessWidget {
       height: height,
       child: _TableCellShell(
         background: const Color(0xFFFAFBFC),
+        dense: dense,
         child: Text(
           label,
           textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+          style: TextStyle(
+            fontSize: dense ? 9 : 13,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
     );
@@ -372,10 +413,15 @@ class _GridLinesPainter extends CustomPainter {
 }
 
 class _TableCellShell extends StatelessWidget {
-  const _TableCellShell({required this.background, required this.child});
+  const _TableCellShell({
+    required this.background,
+    required this.child,
+    this.dense = false,
+  });
 
   final Color background;
   final Widget child;
+  final bool dense;
 
   @override
   Widget build(BuildContext context) {
@@ -388,7 +434,9 @@ class _TableCellShell extends StatelessWidget {
           width: 0.5,
         ),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      padding: dense
+          ? const EdgeInsets.symmetric(horizontal: 1, vertical: 2)
+          : const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       child: child,
     );
   }
@@ -401,6 +449,7 @@ class _PositionedCourseBlock extends StatelessWidget {
     required this.top,
     required this.width,
     required this.height,
+    required this.dense,
     required this.onTap,
   });
 
@@ -409,6 +458,7 @@ class _PositionedCourseBlock extends StatelessWidget {
   final double top;
   final double width;
   final double height;
+  final bool dense;
   final VoidCallback onTap;
 
   @override
@@ -422,14 +472,14 @@ class _PositionedCourseBlock extends StatelessWidget {
       height: height,
       child: Material(
         color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(dense ? 4 : 8),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(dense ? 4 : 8),
           child: Container(
-            padding: const EdgeInsets.all(8),
+            padding: EdgeInsets.all(dense ? 3 : 8),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(dense ? 4 : 8),
               border: Border.all(color: color.withValues(alpha: 0.35)),
             ),
             child: Column(
@@ -437,30 +487,36 @@ class _PositionedCourseBlock extends StatelessWidget {
               children: [
                 Text(
                   scheduled.course.name,
-                  maxLines: 2,
+                  maxLines: dense ? 4 : 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: color,
+                    fontSize: dense ? 10 : 14,
                     fontWeight: FontWeight.w800,
-                    height: 1.15,
+                    height: dense ? 1.1 : 1.15,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  session.location.isEmpty ? '地点未公布' : session.location,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12, color: Colors.black87),
-                ),
-                const Spacer(),
-                Text(
-                  session.startTime.isEmpty
-                      ? session.periodName
-                      : '${session.startTime}-${session.endTime}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11.5, color: Colors.black54),
-                ),
+                if (!dense) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    session.location.isEmpty ? '地点未公布' : session.location,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12, color: Colors.black87),
+                  ),
+                  const Spacer(),
+                  Text(
+                    session.startTime.isEmpty
+                        ? session.periodName
+                        : '${session.startTime}-${session.endTime}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      color: Colors.black54,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
