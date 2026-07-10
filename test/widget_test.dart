@@ -19,8 +19,8 @@ void main() {
     expect(find.textContaining('开学日期未配置'), findsNothing);
     expect(find.text('节次'), findsOneWidget);
     expect(find.text('星期一'), findsOneWidget);
-    expect(find.text('2026-02'), findsWidgets);
-    expect(find.text('2026-03'), findsWidgets);
+    expect(find.text('02-23'), findsOneWidget);
+    expect(find.text('03-01'), findsOneWidget);
     expect(find.text('第1节'), findsOneWidget);
     expect(find.text('中午1'), findsOneWidget);
     expect(find.text('第12节'), findsOneWidget);
@@ -41,7 +41,7 @@ void main() {
     expect(find.textContaining('开学日期未配置'), findsNothing);
     expect(find.text('节次'), findsOneWidget);
     expect(find.text('星期一'), findsOneWidget);
-    expect(find.text('2026-02'), findsWidgets);
+    expect(find.text('02-23'), findsOneWidget);
     expect(find.text('第1节'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -132,8 +132,8 @@ void main() {
 
     expect(find.text('预览结果'), findsOneWidget);
     expect(find.text('19 门'), findsOneWidget);
-    expect(find.text('2026-02'), findsWidgets);
-    expect(find.text('2026-03'), findsOneWidget);
+    expect(find.text('02-23'), findsOneWidget);
+    expect(find.text('03-01'), findsOneWidget);
     expect(find.text('2026-02-23 - 2026-03-01'), findsNothing);
     expect(find.text('预览周次'), findsOneWidget);
     expect(find.text('节次'), findsOneWidget);
@@ -175,7 +175,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('preview-import-button')));
     await tester.pumpAndSettle();
 
-    expect(find.text('2026-02'), findsWidgets);
+    expect(find.text('02-23'), findsWidgets);
     expect(find.text('2026-02-23 - 2026-03-01'), findsNothing);
     expect(find.text('大学生心理健康（网络共享课）'), findsNothing);
 
@@ -188,7 +188,7 @@ void main() {
     await tester.tap(find.text('第2周').last);
     await tester.pumpAndSettle();
 
-    expect(find.text('2026-03'), findsWidgets);
+    expect(find.text('03-02'), findsWidgets);
     expect(find.text('2026-03-02 - 2026-03-08'), findsNothing);
     expect(find.text('大学生心理健康（网络共享课）'), findsOneWidget);
   });
@@ -206,7 +206,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('导入课表'), findsOneWidget);
-    expect(find.text('2026-02'), findsWidgets);
+    expect(find.text('02-23'), findsWidgets);
     expect(find.text('2026-02-23 - 2026-03-01'), findsNothing);
     expect((await store.loadRecords()).single.displayName, '导入课表');
   });

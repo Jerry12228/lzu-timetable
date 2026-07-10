@@ -202,7 +202,7 @@ class _HeaderCell extends StatelessWidget {
             if (date != null) ...[
               const SizedBox(height: 2),
               Text(
-                _formatYearMonth(date!),
+                _formatMonthDay(date!),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
@@ -573,7 +573,8 @@ Color _courseColor(String key) {
   return colors[hash % colors.length];
 }
 
-String _formatYearMonth(DateTime date) {
+String _formatMonthDay(DateTime date) {
   final month = date.month.toString().padLeft(2, '0');
-  return '${date.year}-$month';
+  final day = date.day.toString().padLeft(2, '0');
+  return '$month-$day';
 }
