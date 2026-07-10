@@ -6,7 +6,6 @@ import 'timetable_grid.dart';
 import '../models/schedule_models.dart';
 import '../services/course_customization_store.dart';
 import '../services/imported_semester_store.dart';
-import '../services/sample_semester_loader.dart';
 
 class CourseScheduleApp extends StatelessWidget {
   const CourseScheduleApp({
@@ -62,20 +61,16 @@ class _SemesterBootstrapState extends State<_SemesterBootstrap> {
   late Future<List<Semester>> _semestersFuture = _loadSemesters();
   String? _selectedSemesterId;
 
-  Future<List<Semester>> _loadBundledSemesters() =>
-      widget.semestersFuture ?? const SampleSemesterLoader().load();
+  Future<List<Semester>> _loadSeedSemesters() =>
+      widget.semestersFuture ?? Future.value(const <Semester>[]);
 
   Future<List<Semester>> _loadSemesters() async {
-    final bundled = await _loadBundledSemesters();
+    final seedSemesters = await _loadSeedSemesters();
     final imported = await _importedSemesterStore.loadSemesters();
-    final hiddenBundledIds = await _importedSemesterStore
-        .loadHiddenBundledSemesterIds();
     final importedIds = {for (final semester in imported) semester.id};
     final semesters = [
-      for (final semester in bundled)
-        if (!hiddenBundledIds.contains(semester.id) &&
-            !importedIds.contains(semester.id))
-          semester,
+      for (final semester in seedSemesters)
+        if (!importedIds.contains(semester.id)) semester,
       ...imported,
     ];
     return Future.wait([
@@ -778,7 +773,7 @@ class _SessionDetail extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
-        '${session.weekRule.rawText} · ${session.weekdayText} · ${session.periodName}'
+        '第${session.week}周 · ${session.weekdayText} · ${session.periodName}'
         ' · ${session.startTime}-${session.endTime}'
         ' · ${session.location.isEmpty ? '地点未公布' : session.location}',
       ),

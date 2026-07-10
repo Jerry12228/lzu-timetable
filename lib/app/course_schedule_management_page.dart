@@ -202,10 +202,8 @@ class _CourseScheduleManagementPageState
           editingSemesterId: recognized == null ? semester?.id : null,
           initialDisplayName: recognized?.displayName ?? semester?.displayName,
           initialTermStartDate: semester?.termStartDate,
-          initialCourseHtml:
-              recognized?.courseHtml ??
-              entry?.record?.courseHtml ??
-              semester?.sourceCourseHtml,
+          initialSemester: recognized == null ? semester : null,
+          initialCourseHtml: recognized?.courseHtml,
         ),
       ),
     );

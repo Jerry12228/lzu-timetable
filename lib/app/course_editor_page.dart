@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../models/schedule_models.dart';
-import '../services/semester_importer.dart';
 
 class CourseEditorPage extends StatefulWidget {
   const CourseEditorPage({
@@ -213,6 +212,7 @@ class _CourseEditorPageState extends State<CourseEditorPage> {
       context: context,
       builder: (context) => _CourseSessionEditorDialog(
         periods: widget.semester.periods,
+        maxWeek: widget.semester.maxWeek < 20 ? 20 : widget.semester.maxWeek,
         initialSession: index == null ? null : _sessions[index],
       ),
     );
@@ -372,7 +372,7 @@ class _SessionEditorRow extends StatelessWidget {
             onChanged: (value) => onSelected(value ?? false),
           ),
           title: Text(
-            '${session.weekRule.rawText} · ${session.weekdayText} · ${session.periodName}',
+            '第${session.week}周 · ${session.weekdayText} · ${session.periodName}',
           ),
           subtitle: Text(
             '${session.startTime}-${session.endTime} · ${session.location.isEmpty ? '地点未公布' : session.location}',
@@ -392,10 +392,12 @@ class _SessionEditorRow extends StatelessWidget {
 class _CourseSessionEditorDialog extends StatefulWidget {
   const _CourseSessionEditorDialog({
     required this.periods,
+    required this.maxWeek,
     required this.initialSession,
   });
 
   final List<PeriodDefinition> periods;
+  final int maxWeek;
   final CourseSession? initialSession;
 
   @override
@@ -405,9 +407,7 @@ class _CourseSessionEditorDialog extends StatefulWidget {
 
 class _CourseSessionEditorDialogState
     extends State<_CourseSessionEditorDialog> {
-  final _weekRuleController = TextEditingController();
-  final _locationController = TextEditingController();
-  String? _errorMessage;
+  late int _week;
   late int _weekday;
   late String _periodName;
 
@@ -415,20 +415,12 @@ class _CourseSessionEditorDialogState
   void initState() {
     super.initState();
     final session = widget.initialSession;
-    _weekRuleController.text = session?.weekRule.rawText ?? '';
-    _locationController.text = session?.location ?? '';
+    _week = session?.week ?? 1;
     _weekday = session?.weekday ?? 1;
     _periodName =
         widget.periods.any((period) => period.name == session?.periodName)
         ? session!.periodName
         : widget.periods.first.name;
-  }
-
-  @override
-  void dispose() {
-    _weekRuleController.dispose();
-    _locationController.dispose();
-    super.dispose();
   }
 
   @override
@@ -441,13 +433,22 @@ class _CourseSessionEditorDialogState
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(
-                key: const ValueKey('session-week-rule-field'),
-                controller: _weekRuleController,
+              DropdownButtonFormField<int>(
+                key: const ValueKey('session-week-dropdown'),
+                initialValue: _week,
                 decoration: const InputDecoration(
-                  labelText: '周次规则',
+                  labelText: '周次',
                   border: OutlineInputBorder(),
                 ),
+                items: [
+                  for (var week = 1; week <= widget.maxWeek; week++)
+                    DropdownMenuItem(value: week, child: Text('第$week周')),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => _week = value);
+                  }
+                },
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<int>(
@@ -489,21 +490,6 @@ class _CourseSessionEditorDialogState
                   }
                 },
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _locationController,
-                decoration: const InputDecoration(
-                  labelText: '地点',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              if (_errorMessage != null) ...[
-                const SizedBox(height: 10),
-                Text(
-                  _errorMessage!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ],
             ],
           ),
         ),
@@ -519,26 +505,20 @@ class _CourseSessionEditorDialogState
   }
 
   void _save() {
-    try {
-      final period = widget.periods.firstWhere(
-        (item) => item.name == _periodName,
-      );
-      final session = CourseSession(
-        weekRule: SemesterImporter.parseWeekRule(
-          _weekRuleController.text.trim(),
-        ),
-        weekday: _weekday,
-        weekdayText: weekdays[_weekday - 1],
-        periodName: period.name,
-        startTime: period.startTime,
-        endTime: period.endTime,
-        sections: period.sections,
-        location: _locationController.text.trim(),
-      );
-      Navigator.of(context).pop(session);
-    } on FormatException catch (error) {
-      setState(() => _errorMessage = error.message);
-    }
+    final period = widget.periods.firstWhere(
+      (item) => item.name == _periodName,
+    );
+    final session = CourseSession(
+      week: _week,
+      weekday: _weekday,
+      weekdayText: weekdays[_weekday - 1],
+      periodName: period.name,
+      startTime: period.startTime,
+      endTime: period.endTime,
+      sections: period.sections,
+      location: widget.initialSession?.location ?? '',
+    );
+    Navigator.of(context).pop(session);
   }
 }
 

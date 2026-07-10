@@ -12,6 +12,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   late final semester = _loadSampleSemester();
 
+  testWidgets('starts without a bundled course schedule', (tester) async {
+    final store = await _emptyStore();
+    await tester.pumpWidget(CourseScheduleApp(importedSemesterStore: store));
+    await tester.pumpAndSettle();
+
+    expect(find.text('还没有课程表'), findsOneWidget);
+    expect(find.text('2025-2026-2学期'), findsNothing);
+  });
+
   testWidgets('shows semester controls and timetable headers', (tester) async {
     await _pumpSchedule(tester, semester);
 
@@ -139,7 +148,7 @@ void main() {
     );
   });
 
-  testWidgets('edits one session and removes selected sessions', (
+  testWidgets('selects one week session and removes selected sessions', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
@@ -165,20 +174,28 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('编辑节次').first);
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const ValueKey('session-week-rule-field')),
-      '第2周',
-    );
+    expect(find.byKey(const ValueKey('session-week-rule-field')), findsNothing);
+    expect(find.byKey(const ValueKey('session-week-dropdown')), findsOneWidget);
+    expect(find.text('地点'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('session-week-dropdown')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('第2周').last);
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '保存'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('第2周'), findsOneWidget);
+    expect(find.textContaining('第2周'), findsWidgets);
 
-    await tester.ensureVisible(find.byType(Checkbox).first);
+    final firstSessionCheckbox = find.byType(Checkbox).first;
+    await tester.ensureVisible(firstSessionCheckbox);
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(Checkbox).first);
+    await tester.tap(firstSessionCheckbox);
     await tester.pumpAndSettle();
-    await tester.ensureVisible(
+    expect(tester.widget<Checkbox>(firstSessionCheckbox).value, isTrue);
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, 1200));
+    await tester.pumpAndSettle();
+    expect(
       find.byKey(const ValueKey('delete-selected-sessions-button')),
+      findsOneWidget,
     );
     await tester.pumpAndSettle();
     await tester.tap(
@@ -407,11 +424,7 @@ void main() {
   ) async {
     final store = await _emptyStore();
     final record = await store.addRecord(
-      displayName: '待修改课表',
-      termStartDate: DateTime(2026, 2, 23),
-      courseHtml: File(
-        'assets/raw/2025-2026-2-courses.html',
-      ).readAsStringSync(),
+      semester: _loadSampleSemester(displayName: '待修改课表'),
       existingDisplayNames: const ['2025-2026-2学期'],
     );
     await _pumpSchedule(tester, semester, store: store);
@@ -449,11 +462,7 @@ void main() {
   ) async {
     final store = await _emptyStore();
     final record = await store.addRecord(
-      displayName: '待删除课表',
-      termStartDate: DateTime(2026, 2, 23),
-      courseHtml: File(
-        'assets/raw/2025-2026-2-courses.html',
-      ).readAsStringSync(),
+      semester: _loadSampleSemester(displayName: '待删除课表'),
       existingDisplayNames: const ['2025-2026-2学期'],
     );
     await _pumpSchedule(tester, semester, store: store);
@@ -469,11 +478,15 @@ void main() {
   });
 }
 
-Semester _loadSampleSemester() {
+Semester _loadSampleSemester({
+  String semesterId = '2025-2026-2',
+  String displayName = '2025-2026-2学期',
+  DateTime? termStartDate,
+}) {
   return SemesterImporter.parseCourseHtml(
-    semesterId: '2025-2026-2',
-    displayName: '2025-2026-2学期',
-    termStartDate: DateTime(2026, 2, 23),
+    semesterId: semesterId,
+    displayName: displayName,
+    termStartDate: termStartDate ?? DateTime(2026, 2, 23),
     courseHtml: File('assets/raw/2025-2026-2-courses.html').readAsStringSync(),
   );
 }

@@ -38,6 +38,7 @@ class CourseCustomizationStore {
       return const {};
     }
     final customizations = <CourseKey, CourseCustomization>{};
+    final needsRewrite = _containsLegacyWeekRules(rawSemester);
     for (final value in rawSemester.values) {
       if (value is! Map) {
         continue;
@@ -50,6 +51,13 @@ class CourseCustomizationStore {
       } on FormatException {
         // Ignore one malformed local override instead of blocking the timetable.
       }
+    }
+    if (needsRewrite) {
+      all[semesterId] = {
+        for (final customization in customizations.values)
+          customization.courseKey.value: _customizationToJson(customization),
+      };
+      await _writeAll(all);
     }
     return customizations;
   }
@@ -112,7 +120,7 @@ Map<String, Object?> _customizationToJson(CourseCustomization customization) {
     'sessions': [
       for (final session in customization.sessions)
         {
-          'weekRule': session.weekRule.rawText,
+          'week': session.week,
           'weekday': session.weekday,
           'weekdayText': session.weekdayText,
           'periodName': session.periodName,
@@ -150,7 +158,7 @@ CourseCustomization _customizationFromJson(Map<String, Object?> json) {
     ),
     sessions: [
       for (final item in sessions)
-        _sessionFromJson(
+        ..._sessionsFromJson(
           item is Map
               ? Map<String, Object?>.from(item)
               : throw const FormatException('Invalid course session'),
@@ -159,21 +167,39 @@ CourseCustomization _customizationFromJson(Map<String, Object?> json) {
   );
 }
 
-CourseSession _sessionFromJson(Map<String, Object?> json) {
+List<CourseSession> _sessionsFromJson(Map<String, Object?> json) {
   final weekday = json['weekday'];
   if (weekday is! int) {
     throw const FormatException('Invalid course session weekday');
   }
-  return CourseSession(
-    weekRule: SemesterImporter.parseWeekRule(_string(json, 'weekRule')),
-    weekday: weekday,
-    weekdayText: _string(json, 'weekdayText'),
-    periodName: _string(json, 'periodName'),
-    startTime: _string(json, 'startTime'),
-    endTime: _string(json, 'endTime'),
-    sections: _stringList(json['sections']),
-    location: _string(json, 'location'),
-  );
+  final weeks = switch (json['week']) {
+    final int week when week > 0 => [week],
+    _ => SemesterImporter.parseWeeks(_string(json, 'weekRule')),
+  };
+  return [
+    for (final week in weeks)
+      CourseSession(
+        week: week,
+        weekday: weekday,
+        weekdayText: _string(json, 'weekdayText'),
+        periodName: _string(json, 'periodName'),
+        startTime: _string(json, 'startTime'),
+        endTime: _string(json, 'endTime'),
+        sections: _stringList(json['sections']),
+        location: _string(json, 'location'),
+      ),
+  ];
+}
+
+bool _containsLegacyWeekRules(Object? value) {
+  return switch (value) {
+    Map() => value.entries.any(
+      (entry) =>
+          entry.key == 'weekRule' || _containsLegacyWeekRules(entry.value),
+    ),
+    List() => value.any(_containsLegacyWeekRules),
+    _ => false,
+  };
 }
 
 String _string(Map<String, Object?> json, String key) {

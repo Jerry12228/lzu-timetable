@@ -1,55 +1,4 @@
-enum WeekParity { all, odd, even }
-
 const weekdays = <String>['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'];
-
-class WeekRule {
-  const WeekRule.range({
-    required this.rawText,
-    required this.startWeek,
-    required this.endWeek,
-    this.parity = WeekParity.all,
-  }) : explicitWeeks = null;
-
-  WeekRule.explicit({required this.rawText, required Iterable<int> weeks})
-    : explicitWeeks = Set<int>.unmodifiable(weeks),
-      startWeek = weeks.reduce((a, b) => a < b ? a : b),
-      endWeek = weeks.reduce((a, b) => a > b ? a : b),
-      parity = WeekParity.all;
-
-  final String rawText;
-  final int startWeek;
-  final int endWeek;
-  final WeekParity parity;
-  final Set<int>? explicitWeeks;
-
-  bool get isExplicit => explicitWeeks != null;
-
-  bool occursIn(int week) {
-    final weeks = explicitWeeks;
-    if (weeks != null) {
-      return weeks.contains(week);
-    }
-    if (week < startWeek || week > endWeek) {
-      return false;
-    }
-    return switch (parity) {
-      WeekParity.all => true,
-      WeekParity.odd => week.isOdd,
-      WeekParity.even => week.isEven,
-    };
-  }
-
-  List<int> expand() {
-    final weeks = explicitWeeks;
-    if (weeks != null) {
-      return weeks.toList()..sort();
-    }
-    return [
-      for (var week = startWeek; week <= endWeek; week++)
-        if (occursIn(week)) week,
-    ];
-  }
-}
 
 class PeriodDefinition {
   const PeriodDefinition({
@@ -72,7 +21,7 @@ class PeriodDefinition {
 
 class CourseSession {
   const CourseSession({
-    required this.weekRule,
+    required this.week,
     required this.weekday,
     required this.weekdayText,
     required this.periodName,
@@ -82,7 +31,7 @@ class CourseSession {
     required this.location,
   });
 
-  final WeekRule weekRule;
+  final int week;
   final int weekday;
   final String weekdayText;
   final String periodName;
@@ -91,12 +40,12 @@ class CourseSession {
   final List<String> sections;
   final String location;
 
-  bool occursInWeek(int week) => weekRule.occursIn(week);
+  bool occursInWeek(int value) => week == value;
 
   int get startMinutes => startTime.isEmpty ? 0 : parseClockMinutes(startTime);
 
   CourseSession copyWith({
-    WeekRule? weekRule,
+    int? week,
     int? weekday,
     String? weekdayText,
     String? periodName,
@@ -106,7 +55,7 @@ class CourseSession {
     String? location,
   }) {
     return CourseSession(
-      weekRule: weekRule ?? this.weekRule,
+      week: week ?? this.week,
       weekday: weekday ?? this.weekday,
       weekdayText: weekdayText ?? this.weekdayText,
       periodName: periodName ?? this.periodName,
@@ -329,7 +278,6 @@ class Semester {
     required this.termStartDate,
     required this.courses,
     required this.periods,
-    this.sourceCourseHtml,
   });
 
   final String id;
@@ -337,14 +285,13 @@ class Semester {
   final DateTime? termStartDate;
   final List<Course> courses;
   final List<PeriodDefinition> periods;
-  final String? sourceCourseHtml;
 
   int get maxWeek {
     var maxWeek = 1;
     for (final course in courses) {
       for (final session in course.sessions) {
-        if (session.weekRule.endWeek > maxWeek) {
-          maxWeek = session.weekRule.endWeek;
+        if (session.week > maxWeek) {
+          maxWeek = session.week;
         }
       }
     }
@@ -354,14 +301,19 @@ class Semester {
   List<Course> get coursesWithoutFixedSchedule =>
       courses.where((course) => !course.hasFixedSchedule).toList();
 
-  Semester copyWith({List<Course>? courses}) {
+  Semester copyWith({
+    String? id,
+    String? displayName,
+    DateTime? termStartDate,
+    List<Course>? courses,
+    List<PeriodDefinition>? periods,
+  }) {
     return Semester(
-      id: id,
-      displayName: displayName,
-      termStartDate: termStartDate,
+      id: id ?? this.id,
+      displayName: displayName ?? this.displayName,
+      termStartDate: termStartDate ?? this.termStartDate,
       courses: courses ?? this.courses,
-      periods: periods,
-      sourceCourseHtml: sourceCourseHtml,
+      periods: periods ?? this.periods,
     );
   }
 

@@ -22,7 +22,6 @@ class SemesterImporter {
       termStartDate: termStartDate,
       courses: courses,
       periods: periods,
-      sourceCourseHtml: courseHtml,
     );
   }
 
@@ -39,7 +38,6 @@ class SemesterImporter {
       termStartDate: termStartDate,
       courses: courses,
       periods: DefaultPeriods.all,
-      sourceCourseHtml: courseHtml,
     );
   }
 
@@ -146,23 +144,25 @@ class SemesterImporter {
         continue;
       }
       final period = periodsByName[_compact(periodName)];
-      sessions.add(
-        CourseSession(
-          weekRule: parseWeekRule(weekText),
-          weekday: parseWeekday(weekdayText),
-          weekdayText: weekdayText,
-          periodName: periodName,
-          startTime: period?.startTime ?? '',
-          endTime: period?.endTime ?? '',
-          sections: period?.sections ?? const [],
-          location: location,
-        ),
-      );
+      for (final week in parseWeeks(weekText)) {
+        sessions.add(
+          CourseSession(
+            week: week,
+            weekday: parseWeekday(weekdayText),
+            weekdayText: weekdayText,
+            periodName: periodName,
+            startTime: period?.startTime ?? '',
+            endTime: period?.endTime ?? '',
+            sections: period?.sections ?? const [],
+            location: location,
+          ),
+        );
+      }
     }
     return sessions;
   }
 
-  static WeekRule parseWeekRule(String rawText) {
+  static List<int> parseWeeks(String rawText) {
     final compact = _compact(rawText).replaceAll('，', ',').replaceAll('、', ',');
     final explicitMatch = RegExp(r'^第([\d,]+)周$').firstMatch(compact);
     if (explicitMatch != null) {
@@ -175,7 +175,7 @@ class SemesterImporter {
       if (weeks.isEmpty) {
         throw FormatException('Invalid week rule: $rawText');
       }
-      return WeekRule.explicit(rawText: rawText, weeks: weeks);
+      return weeks.toSet().toList()..sort();
     }
 
     final rangeMatch = RegExp(r'^(\d+)-(\d+)周(全周|单周|双周)?$').firstMatch(compact);
@@ -185,17 +185,12 @@ class SemesterImporter {
       if (startWeek <= 0 || endWeek < startWeek) {
         throw FormatException('Invalid week range: $rawText');
       }
-      final parity = switch (rangeMatch.group(3)) {
-        '单周' => WeekParity.odd,
-        '双周' => WeekParity.even,
-        _ => WeekParity.all,
-      };
-      return WeekRule.range(
-        rawText: rawText,
-        startWeek: startWeek,
-        endWeek: endWeek,
-        parity: parity,
-      );
+      final suffix = rangeMatch.group(3);
+      return [
+        for (var week = startWeek; week <= endWeek; week++)
+          if (suffix != '单周' || week.isOdd)
+            if (suffix != '双周' || week.isEven) week,
+      ];
     }
 
     throw FormatException('Unsupported week rule: $rawText');

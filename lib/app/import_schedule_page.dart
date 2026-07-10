@@ -16,6 +16,7 @@ class ImportSchedulePage extends StatefulWidget {
     this.editingSemesterId,
     this.initialDisplayName,
     this.initialTermStartDate,
+    this.initialSemester,
     this.initialCourseHtml,
   });
 
@@ -24,6 +25,7 @@ class ImportSchedulePage extends StatefulWidget {
   final String? editingSemesterId;
   final String? initialDisplayName;
   final DateTime? initialTermStartDate;
+  final Semester? initialSemester;
   final String? initialCourseHtml;
 
   bool get isEditing => editingSemesterId != null;
@@ -112,10 +114,13 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
                     controller: _htmlController,
                     minLines: 10,
                     maxLines: 18,
-                    decoration: const InputDecoration(
-                      labelText: '课程列表 HTML',
+                    decoration: InputDecoration(
+                      labelText: widget.isEditing
+                          ? '课程列表 HTML（可选，重新解析课程）'
+                          : '课程列表 HTML',
+                      hintText: widget.isEditing ? '留空会保留当前已解析的课程数据' : null,
                       alignLabelWithHint: true,
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -244,13 +249,9 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
       _errorMessage = null;
     });
     try {
-      final displayName = _validatedDisplayName();
-      final termStartDate = _validatedStartDate();
       final record = await widget.store.saveRecord(
         semesterId: widget.editingSemesterId,
-        displayName: displayName,
-        termStartDate: termStartDate,
-        courseHtml: _htmlController.text,
+        semester: preview,
         existingDisplayNames: widget.existingDisplayNames,
       );
       if (mounted) {
@@ -272,10 +273,18 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
     final termStartDate = _validatedStartDate();
     final courseHtml = _htmlController.text.trim();
     if (courseHtml.isEmpty) {
-      throw const FormatException('请粘贴或上传课程列表 HTML');
+      final initialSemester = widget.initialSemester;
+      if (initialSemester == null) {
+        throw const FormatException('请粘贴或上传课程列表 HTML');
+      }
+      return initialSemester.copyWith(
+        id: widget.editingSemesterId ?? initialSemester.id,
+        displayName: displayName,
+        termStartDate: termStartDate,
+      );
     }
     return SemesterImporter.parseCourseHtml(
-      semesterId: 'preview',
+      semesterId: widget.editingSemesterId ?? 'preview',
       displayName: displayName,
       termStartDate: termStartDate,
       courseHtml: courseHtml,
@@ -500,7 +509,7 @@ class _PreviewCourseDialog extends StatelessWidget {
             _PreviewLine(label: '考核方式', value: course.assessment),
             if (session != null) ...[
               const SizedBox(height: 8),
-              _PreviewLine(label: '周次', value: session!.weekRule.rawText),
+              _PreviewLine(label: '周次', value: '第${session!.week}周'),
               _PreviewLine(label: '星期', value: session!.weekdayText),
               _PreviewLine(label: '节次', value: session!.periodName),
               _PreviewLine(

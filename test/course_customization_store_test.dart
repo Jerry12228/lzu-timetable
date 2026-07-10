@@ -32,6 +32,11 @@ void main() {
       customization: customization,
     );
 
+    expect(
+      preferences.getString('course_schedule_course_customizations_v1'),
+      isNot(contains('weekRule')),
+    );
+
     final reloadedStore = CourseCustomizationStore(preferences: preferences);
     final reimportedSemester = SemesterImporter.parseCourseHtml(
       semesterId: semester.id,

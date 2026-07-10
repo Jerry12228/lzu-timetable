@@ -18,11 +18,13 @@
 
 ## Data Rules
 
-- Preserve the original teaching-system HTML samples under `assets/raw/`.
+- Preserve the original teaching-system HTML samples under `assets/raw/` for repository tests only; do not include them in Flutter runtime assets or ship an initial schedule.
 - Parse course HTML and period HTML into typed Dart models before rendering.
 - Do not hand-edit normalized course data when it can be derived from the source HTML.
 - Future imports should feed the same importer API used by bundled samples.
 - Keep raw full-page teaching-system samples under `assets/raw/` when they are used to verify import compatibility.
+- Parse imported HTML before persistence and store only typed, JSON-serializable semester data. HTML may exist only in the transient import flow or be read once to migrate an older local record.
+- Expand teaching-system week expressions during parsing. Store and render each fixed class as an individual numeric week session; do not persist or expose editable week-rule text.
 - Preserve source course HTML when users edit a course. Persist local course overrides separately and apply them only when the immutable `课程号 + 课程序号` key still matches an imported course.
 
 ## Implementation Guidelines

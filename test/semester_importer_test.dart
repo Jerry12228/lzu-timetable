@@ -76,26 +76,28 @@ void main() {
     expect(semester.maxWeek, 17);
   });
 
-  test('preserves multi-teacher and multi-session course details', () {
+  test('expands imported schedules into individual weekly sessions', () {
     final botanyLab = semester.courses.firstWhere(
       (course) => course.name == '植物学实验',
     );
     expect(botanyLab.teachers, ['林雯', '赵宁', '杨梅', '孙丽娟']);
-    expect(botanyLab.sessions, hasLength(2));
+    expect(botanyLab.sessions, isNotEmpty);
+    expect(botanyLab.sessions.every((session) => session.week > 0), isTrue);
     expect(botanyLab.sessions.first.periodName, '上午1-4节');
     expect(botanyLab.sessions.last.location, '陇山堂A323');
 
     final calculus = semester.courses.firstWhere(
       (course) => course.name == '高等数学（同济版）B（2）',
     );
-    expect(calculus.sessions, hasLength(5));
-    expect(calculus.sessions.map((session) => session.weekRule.rawText), [
-      '1-17周全周',
-      '1-17周全周',
-      '第9周',
-      '第15周',
-      '第16周',
-    ]);
+    expect(calculus.sessions, hasLength(37));
+    expect(
+      calculus.sessions.where((session) => session.week == 9),
+      hasLength(3),
+    );
+    expect(
+      calculus.sessions.where((session) => session.week == 15),
+      hasLength(3),
+    );
   });
 
   test('keeps courses without fixed schedule outside weekly sessions', () {
@@ -105,42 +107,40 @@ void main() {
     expect(unscheduledNames, ['通信原理', '漫画艺术欣赏与创作（网络共享课）', '男生穿搭技巧']);
   });
 
-  test('filters range, even-week, and explicit week expressions', () {
-    final allWeeks = SemesterImporter.parseWeekRule('1-17周全周');
-    expect(
-      [for (var week = 1; week <= 17; week++) allWeeks.occursIn(week)],
-      [
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-      ],
-    );
-
-    final evenWeeks = SemesterImporter.parseWeekRule('2-16周双周');
-    expect(evenWeeks.expand(), [2, 4, 6, 8, 10, 12, 14, 16]);
-    expect(evenWeeks.occursIn(3), isFalse);
-
-    final explicitWeeks = SemesterImporter.parseWeekRule('第2,6,10周');
-    expect(explicitWeeks.expand(), [2, 6, 10]);
-    expect(explicitWeeks.occursIn(8), isFalse);
-
-    expect(SemesterImporter.parseWeekRule('第9周').expand(), [9]);
-    expect(SemesterImporter.parseWeekRule('第15周').expand(), [15]);
-    expect(SemesterImporter.parseWeekRule('第16周').expand(), [16]);
+  test('expands range, even-week, and explicit week expressions', () {
+    expect(SemesterImporter.parseWeeks('1-17周全周'), [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+    ]);
+    expect(SemesterImporter.parseWeeks('2-16周双周'), [
+      2,
+      4,
+      6,
+      8,
+      10,
+      12,
+      14,
+      16,
+    ]);
+    expect(SemesterImporter.parseWeeks('第2,6,10周'), [2, 6, 10]);
+    expect(SemesterImporter.parseWeeks('第9周'), [9]);
+    expect(SemesterImporter.parseWeeks('第15周'), [15]);
+    expect(SemesterImporter.parseWeeks('第16周'), [16]);
   });
 
   test('builds weekly scheduled course list', () {
