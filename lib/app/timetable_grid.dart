@@ -487,7 +487,7 @@ class _PositionedCourseBlock extends StatelessWidget {
               children: [
                 Text(
                   scheduled.course.name,
-                  maxLines: dense ? 4 : 2,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: color,
@@ -496,6 +496,19 @@ class _PositionedCourseBlock extends StatelessWidget {
                     height: dense ? 1.1 : 1.15,
                   ),
                 ),
+                if (dense) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    session.location.isEmpty ? '地点未公布' : session.location,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 8.5,
+                      height: 1.1,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ],
                 if (!dense) ...[
                   const SizedBox(height: 4),
                   Text(

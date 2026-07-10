@@ -47,6 +47,7 @@ void main() {
     expect(find.text('星期日'), findsOneWidget);
     expect(find.text('02-23'), findsOneWidget);
     expect(find.text('第1节'), findsOneWidget);
+    expect(find.text('天山堂A208'), findsOneWidget);
 
     final tableSize = tester.getSize(
       find.byKey(const ValueKey('timetable-canvas')),
