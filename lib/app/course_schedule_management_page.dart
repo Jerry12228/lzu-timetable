@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../models/schedule_models.dart';
+import '../services/academic_course_page_recognizer.dart';
 import '../services/imported_semester_store.dart';
+import 'academic_system_import.dart';
 import 'import_schedule_page.dart';
 
 class CourseScheduleManagementResult {
@@ -74,7 +76,7 @@ class _CourseScheduleManagementPageState
               padding: const EdgeInsets.only(right: 8),
               child: TextButton.icon(
                 key: const ValueKey('manage-add-schedule-button'),
-                onPressed: () => _openEditor(),
+                onPressed: _showAddMenu,
                 icon: const Icon(Icons.add),
                 label: const Text('添加'),
               ),
@@ -97,7 +99,7 @@ class _CourseScheduleManagementPageState
             }
             final entries = snapshot.data ?? const <_ManagedSemester>[];
             if (entries.isEmpty) {
-              return _EmptyManagementState(onAdd: _openEditor);
+              return _EmptyManagementState(onAdd: _showAddMenu);
             }
             return ListView.separated(
               padding: const EdgeInsets.all(16),
@@ -130,7 +132,60 @@ class _CourseScheduleManagementPageState
     );
   }
 
-  Future<void> _openEditor({_ManagedSemester? entry}) async {
+  Future<void> _showAddMenu() async {
+    final selected = await showModalBottomSheet<_AddScheduleMethod>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isAcademicSystemImportSupported)
+              ListTile(
+                leading: const Icon(Icons.account_balance_outlined),
+                title: const Text('教务系统导入'),
+                onTap: () => Navigator.of(
+                  context,
+                ).pop(_AddScheduleMethod.academicSystem),
+              ),
+            ListTile(
+              leading: const Icon(Icons.upload_file_outlined),
+              title: const Text('粘贴/上传 HTML'),
+              onTap: () =>
+                  Navigator.of(context).pop(_AddScheduleMethod.manualHtml),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (selected != null) {
+      await _selectAddMethod(selected);
+    }
+  }
+
+  Future<void> _selectAddMethod(_AddScheduleMethod method) {
+    return switch (method) {
+      _AddScheduleMethod.manualHtml => _openEditor(),
+      _AddScheduleMethod.academicSystem => _openAcademicSystemImport(),
+    };
+  }
+
+  Future<void> _openAcademicSystemImport() async {
+    if (!isAcademicSystemImportSupported) {
+      return;
+    }
+    final recognized = await Navigator.of(
+      context,
+    ).push<RecognizedAcademicCoursePage>(createAcademicSystemImportRoute());
+    if (recognized != null && mounted) {
+      await _openEditor(recognized: recognized);
+    }
+  }
+
+  Future<void> _openEditor({
+    _ManagedSemester? entry,
+    RecognizedAcademicCoursePage? recognized,
+  }) async {
     final entries = await _entriesFuture;
     if (!mounted) {
       return;
@@ -144,11 +199,13 @@ class _CourseScheduleManagementPageState
               if (item.semester.id != semester?.id) item.semester.displayName,
           ],
           store: widget.store,
-          editingSemesterId: semester?.id,
-          initialDisplayName: semester?.displayName,
+          editingSemesterId: recognized == null ? semester?.id : null,
+          initialDisplayName: recognized?.displayName ?? semester?.displayName,
           initialTermStartDate: semester?.termStartDate,
           initialCourseHtml:
-              entry?.record?.courseHtml ?? semester?.sourceCourseHtml,
+              recognized?.courseHtml ??
+              entry?.record?.courseHtml ??
+              semester?.sourceCourseHtml,
         ),
       ),
     );
@@ -209,6 +266,8 @@ class _CourseScheduleManagementPageState
     );
   }
 }
+
+enum _AddScheduleMethod { academicSystem, manualHtml }
 
 class _ManagedSemester {
   const _ManagedSemester({required this.semester, required this.record});

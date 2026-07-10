@@ -37,6 +37,7 @@ dependencies:
   html: ^0.15.6
   shared_preferences: ^2.5.5
   file_picker: 10.3.3
+  webview_flutter: ^4.13.0
 
 dev_dependencies:
   flutter_test:

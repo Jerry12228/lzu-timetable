@@ -74,7 +74,8 @@ class SemesterImporter {
     List<PeriodDefinition> periods,
   ) {
     final document = html_parser.parse(html);
-    final rows = document.querySelectorAll('tr.infolist_common');
+    final courseTable = _findCourseTable(document);
+    final rows = courseTable.querySelectorAll('tr.infolist_common');
     if (rows.isEmpty) {
       throw const FormatException('未找到课程列表，请确认粘贴或上传的是课程列表 HTML');
     }
@@ -109,6 +110,22 @@ class SemesterImporter {
         sessions: _parseSessions(scheduleCell, periodsByName),
       );
     }).toList();
+  }
+
+  static dom.Element _findCourseTable(dom.Document document) {
+    for (final table in document.querySelectorAll('table.infolist_tab')) {
+      final headers = table
+          .querySelectorAll('th')
+          .map(_cleanText)
+          .map(_compact)
+          .toSet();
+      if (headers.contains('课程号') &&
+          headers.contains('课程名称') &&
+          headers.contains('上课时间、地点')) {
+        return table;
+      }
+    }
+    throw const FormatException('未找到课程列表，请确认粘贴或上传的是课程列表 HTML');
   }
 
   static List<CourseSession> _parseSessions(

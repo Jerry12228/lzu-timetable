@@ -22,6 +22,7 @@
 - Parse course HTML and period HTML into typed Dart models before rendering.
 - Do not hand-edit normalized course data when it can be derived from the source HTML.
 - Future imports should feed the same importer API used by bundled samples.
+- Keep raw full-page teaching-system samples under `assets/raw/` when they are used to verify import compatibility.
 
 ## Implementation Guidelines
 
@@ -30,6 +31,7 @@
 - Treat courses with no fixed schedule as valid parsed data, but do not place them in the weekly grid unless a product requirement asks for a separate display.
 - Keep responsive layout usable on PC Web, mobile Web, and Android phones.
 - Keep course schedule creation, editing, and deletion in the dedicated management page; the timetable home remains a viewing surface.
+- Keep Android WebView SSO imports isolated from Flutter Web with conditional imports; never read or persist user credentials.
 
 ## Git Workflow
 

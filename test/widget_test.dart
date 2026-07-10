@@ -86,6 +86,12 @@ void main() {
       findsOneWidget,
     );
     expect(find.byKey(const ValueKey('open-import-page-button')), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('manage-add-schedule-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('教务系统导入'), findsOneWidget);
+    expect(find.text('粘贴/上传 HTML'), findsOneWidget);
   });
 
   testWidgets('keeps the schedule management page usable on Android width', (
@@ -354,6 +360,8 @@ Future<void> _openManagementPage(WidgetTester tester) async {
 Future<void> _openScheduleEditor(WidgetTester tester) async {
   await _openManagementPage(tester);
   await tester.tap(find.byKey(const ValueKey('manage-add-schedule-button')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('粘贴/上传 HTML'));
   await tester.pumpAndSettle();
 }
 

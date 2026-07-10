@@ -52,6 +52,24 @@ void main() {
     expect(courseOnlySemester.dateRangeForWeek(1)!.end, DateTime(2026, 3, 1));
   });
 
+  test('scopes courses to the course table in a complete academic page', () {
+    final courseHtml = File(
+      'assets/raw/2025-2026-2-courses.html',
+    ).readAsStringSync();
+    final completePageHtml = File(
+      'assets/raw/lzu-currcourse-page.html',
+    ).readAsStringSync();
+
+    final completePageSemester = SemesterImporter.parseCourseHtml(
+      semesterId: 'complete-page',
+      displayName: '完整页面导入',
+      termStartDate: null,
+      courseHtml: '$courseHtml\n$completePageHtml',
+    );
+
+    expect(completePageSemester.courses, hasLength(19));
+  });
+
   test('parses bundled sample counts', () {
     expect(semester.courses, hasLength(19));
     expect(semester.periods, hasLength(48));
