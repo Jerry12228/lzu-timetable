@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import 'course_editor_page.dart';
 import 'course_schedule_management_page.dart';
 import 'timetable_grid.dart';
 import '../models/schedule_models.dart';
+import '../services/course_customization_store.dart';
 import '../services/imported_semester_store.dart';
 import '../services/sample_semester_loader.dart';
 
@@ -11,10 +13,12 @@ class CourseScheduleApp extends StatelessWidget {
     super.key,
     this.semestersFuture,
     this.importedSemesterStore,
+    this.courseCustomizationStore,
   });
 
   final Future<List<Semester>>? semestersFuture;
   final ImportedSemesterStore? importedSemesterStore;
+  final CourseCustomizationStore? courseCustomizationStore;
 
   @override
   Widget build(BuildContext context) {
@@ -29,6 +33,7 @@ class CourseScheduleApp extends StatelessWidget {
       home: _SemesterBootstrap(
         semestersFuture: semestersFuture,
         importedSemesterStore: importedSemesterStore,
+        courseCustomizationStore: courseCustomizationStore,
       ),
     );
   }
@@ -38,10 +43,12 @@ class _SemesterBootstrap extends StatefulWidget {
   const _SemesterBootstrap({
     required this.semestersFuture,
     required this.importedSemesterStore,
+    required this.courseCustomizationStore,
   });
 
   final Future<List<Semester>>? semestersFuture;
   final ImportedSemesterStore? importedSemesterStore;
+  final CourseCustomizationStore? courseCustomizationStore;
 
   @override
   State<_SemesterBootstrap> createState() => _SemesterBootstrapState();
@@ -50,6 +57,8 @@ class _SemesterBootstrap extends StatefulWidget {
 class _SemesterBootstrapState extends State<_SemesterBootstrap> {
   late final ImportedSemesterStore _importedSemesterStore =
       widget.importedSemesterStore ?? ImportedSemesterStore();
+  late final CourseCustomizationStore _courseCustomizationStore =
+      widget.courseCustomizationStore ?? CourseCustomizationStore();
   late Future<List<Semester>> _semestersFuture = _loadSemesters();
   String? _selectedSemesterId;
 
@@ -62,13 +71,17 @@ class _SemesterBootstrapState extends State<_SemesterBootstrap> {
     final hiddenBundledIds = await _importedSemesterStore
         .loadHiddenBundledSemesterIds();
     final importedIds = {for (final semester in imported) semester.id};
-    return [
+    final semesters = [
       for (final semester in bundled)
         if (!hiddenBundledIds.contains(semester.id) &&
             !importedIds.contains(semester.id))
           semester,
       ...imported,
     ];
+    return Future.wait([
+      for (final semester in semesters)
+        _courseCustomizationStore.applyToSemester(semester),
+    ]);
   }
 
   @override
@@ -90,6 +103,7 @@ class _SemesterBootstrapState extends State<_SemesterBootstrap> {
           semesters: semesters,
           selectedSemesterId: _selectedSemesterId,
           onManageRequested: _openManagementPage,
+          onCourseCustomizationSaved: _saveCourseCustomization,
         );
       },
     );
@@ -115,6 +129,22 @@ class _SemesterBootstrapState extends State<_SemesterBootstrap> {
       _semestersFuture = _loadSemesters();
     });
   }
+
+  Future<void> _saveCourseCustomization(
+    String semesterId,
+    CourseCustomization customization,
+  ) async {
+    await _courseCustomizationStore.saveCustomization(
+      semesterId: semesterId,
+      customization: customization,
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _semestersFuture = _loadSemesters();
+    });
+  }
 }
 
 class ScheduleHome extends StatefulWidget {
@@ -123,11 +153,17 @@ class ScheduleHome extends StatefulWidget {
     required this.semesters,
     this.selectedSemesterId,
     this.onManageRequested,
+    this.onCourseCustomizationSaved,
   });
 
   final List<Semester> semesters;
   final String? selectedSemesterId;
   final VoidCallback? onManageRequested;
+  final Future<void> Function(
+    String semesterId,
+    CourseCustomization customization,
+  )?
+  onCourseCustomizationSaved;
 
   @override
   State<ScheduleHome> createState() => _ScheduleHomeState();
@@ -154,9 +190,10 @@ class _ScheduleHomeState extends State<ScheduleHome> {
       _selectedWeek = 1;
       return;
     }
-    if (!widget.semesters.any(
-      (semester) => semester.id == _selectedSemester.id,
-    )) {
+    final refreshedSemester = _semesterForId(_selectedSemester.id);
+    if (refreshedSemester != null) {
+      _selectedSemester = refreshedSemester;
+    } else {
       _selectedSemester = widget.semesters.first;
       _selectedWeek = 1;
     }
@@ -240,8 +277,32 @@ class _ScheduleHomeState extends State<ScheduleHome> {
   void _showCourseDetails(Course course, CourseSession? session) {
     showDialog<void>(
       context: context,
-      builder: (context) =>
-          _CourseDetailDialog(course: course, session: session),
+      builder: (dialogContext) => _CourseDetailDialog(
+        course: course,
+        session: session,
+        onEdit: widget.onCourseCustomizationSaved == null
+            ? null
+            : () {
+                Navigator.of(dialogContext).pop();
+                _openCourseEditor(course);
+              },
+      ),
+    );
+  }
+
+  Future<void> _openCourseEditor(Course course) async {
+    final customization = await Navigator.of(context).push<CourseCustomization>(
+      MaterialPageRoute(
+        builder: (context) =>
+            CourseEditorPage(semester: _selectedSemester, course: course),
+      ),
+    );
+    if (customization == null || widget.onCourseCustomizationSaved == null) {
+      return;
+    }
+    await widget.onCourseCustomizationSaved!(
+      _selectedSemester.id,
+      customization,
     );
   }
 
@@ -559,15 +620,31 @@ class _WeekDropdown extends StatelessWidget {
 }
 
 class _CourseDetailDialog extends StatelessWidget {
-  const _CourseDetailDialog({required this.course, required this.session});
+  const _CourseDetailDialog({
+    required this.course,
+    required this.session,
+    this.onEdit,
+  });
 
   final Course course;
   final CourseSession? session;
+  final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(course.name),
+      title: Row(
+        children: [
+          Expanded(child: Text(course.name)),
+          if (onEdit != null)
+            IconButton(
+              key: const ValueKey('edit-course-button'),
+              tooltip: '编辑课程',
+              onPressed: onEdit,
+              icon: const Icon(Icons.edit_outlined),
+            ),
+        ],
+      ),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560),
         child: SingleChildScrollView(

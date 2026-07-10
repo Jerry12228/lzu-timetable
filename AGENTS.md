@@ -23,6 +23,7 @@
 - Do not hand-edit normalized course data when it can be derived from the source HTML.
 - Future imports should feed the same importer API used by bundled samples.
 - Keep raw full-page teaching-system samples under `assets/raw/` when they are used to verify import compatibility.
+- Preserve source course HTML when users edit a course. Persist local course overrides separately and apply them only when the immutable `课程号 + 课程序号` key still matches an imported course.
 
 ## Implementation Guidelines
 

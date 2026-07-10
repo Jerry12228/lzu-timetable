@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:course_schedule/app/course_schedule_app.dart';
 import 'package:course_schedule/models/schedule_models.dart';
+import 'package:course_schedule/services/course_customization_store.dart';
 import 'package:course_schedule/services/imported_semester_store.dart';
 import 'package:course_schedule/services/semester_importer.dart';
 import 'package:flutter/material.dart';
@@ -95,7 +96,146 @@ void main() {
     expect(find.text('课程号'), findsOneWidget);
     expect(find.text('1309061'), findsOneWidget);
     expect(find.text('任课教师'), findsOneWidget);
+    expect(find.byTooltip('编辑课程'), findsOneWidget);
     expect(find.text('关闭'), findsOneWidget);
+  });
+
+  testWidgets('edits course metadata and refreshes the timetable', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final customizationStore = CourseCustomizationStore(
+      preferences: preferences,
+    );
+    await _pumpSchedule(
+      tester,
+      semester,
+      store: ImportedSemesterStore(preferences: preferences),
+      customizationStore: customizationStore,
+    );
+
+    await tester.tap(find.text('中国近现代史纲要').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('edit-course-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('编辑课程'), findsOneWidget);
+    expect(find.text('课程号'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const ValueKey('course-name-field')),
+      '编辑后的课程',
+    );
+    await tester.tap(find.byKey(const ValueKey('save-course-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('编辑后的课程'), findsOneWidget);
+    final applied = await customizationStore.applyToSemester(semester);
+    expect(
+      applied.courses
+          .firstWhere((course) => course.courseCode == '1309061')
+          .name,
+      '编辑后的课程',
+    );
+  });
+
+  testWidgets('edits one session and removes selected sessions', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final customizationStore = CourseCustomizationStore(
+      preferences: preferences,
+    );
+    final source = semester.courses.firstWhere(
+      (course) => course.name == '中国近现代史纲要',
+    );
+    await _pumpSchedule(
+      tester,
+      semester,
+      store: ImportedSemesterStore(preferences: preferences),
+      customizationStore: customizationStore,
+    );
+
+    await tester.tap(find.text(source.name).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('edit-course-button')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byTooltip('编辑节次').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('编辑节次').first);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('session-week-rule-field')),
+      '第2周',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, '保存'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('第2周'), findsOneWidget);
+
+    await tester.ensureVisible(find.byType(Checkbox).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Checkbox).first);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('delete-selected-sessions-button')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('delete-selected-sessions-button')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '删除'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('save-course-button')));
+    await tester.pumpAndSettle();
+
+    final applied = await customizationStore.applyToSemester(semester);
+    final updated = applied.courses.firstWhere(
+      (course) =>
+          course.courseCode == source.courseCode &&
+          course.sequence == source.sequence,
+    );
+    expect(updated.sessions, hasLength(source.sessions.length - 1));
+  });
+
+  testWidgets('confirms before deleting an entire course', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final customizationStore = CourseCustomizationStore(
+      preferences: preferences,
+    );
+    final source = semester.courses.firstWhere(
+      (course) => course.name == '中国近现代史纲要',
+    );
+    await _pumpSchedule(
+      tester,
+      semester,
+      store: ImportedSemesterStore(preferences: preferences),
+      customizationStore: customizationStore,
+    );
+
+    await tester.tap(find.text(source.name).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('edit-course-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('delete-course-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(find.text('编辑课程'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('delete-course-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '删除'));
+    await tester.pumpAndSettle();
+
+    final applied = await customizationStore.applyToSemester(semester);
+    expect(
+      applied.courses.map((course) => course.courseCode),
+      isNot(contains(source.courseCode)),
+    );
+    expect(find.text(source.name), findsNothing);
   });
 
   testWidgets('opens the schedule management page', (tester) async {
@@ -342,6 +482,7 @@ Future<void> _pumpSchedule(
   WidgetTester tester,
   Semester semester, {
   ImportedSemesterStore? store,
+  CourseCustomizationStore? customizationStore,
   Size size = const Size(1280, 900),
 }) async {
   tester.view.physicalSize = size;
@@ -355,6 +496,7 @@ Future<void> _pumpSchedule(
     CourseScheduleApp(
       semestersFuture: Future.value([semester]),
       importedSemesterStore: importedStore,
+      courseCustomizationStore: customizationStore,
     ),
   );
   await tester.pumpAndSettle();

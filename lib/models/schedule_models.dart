@@ -94,6 +94,28 @@ class CourseSession {
   bool occursInWeek(int week) => weekRule.occursIn(week);
 
   int get startMinutes => startTime.isEmpty ? 0 : parseClockMinutes(startTime);
+
+  CourseSession copyWith({
+    WeekRule? weekRule,
+    int? weekday,
+    String? weekdayText,
+    String? periodName,
+    String? startTime,
+    String? endTime,
+    List<String>? sections,
+    String? location,
+  }) {
+    return CourseSession(
+      weekRule: weekRule ?? this.weekRule,
+      weekday: weekday ?? this.weekday,
+      weekdayText: weekdayText ?? this.weekdayText,
+      periodName: periodName ?? this.periodName,
+      startTime: startTime ?? this.startTime,
+      endTime: endTime ?? this.endTime,
+      sections: sections ?? this.sections,
+      location: location ?? this.location,
+    );
+  }
 }
 
 class Course {
@@ -130,6 +152,160 @@ class Course {
   final List<CourseSession> sessions;
 
   bool get hasFixedSchedule => sessions.isNotEmpty;
+
+  Course copyWith({
+    String? name,
+    List<String>? teachers,
+    String? credits,
+    String? selectionType,
+    String? assessment,
+    String? examNature,
+    String? deferredExam,
+    String? material,
+    List<CourseSession>? sessions,
+  }) {
+    return Course(
+      courseCode: courseCode,
+      sequence: sequence,
+      name: name ?? this.name,
+      teachers: teachers ?? this.teachers,
+      credits: credits ?? this.credits,
+      selectionType: selectionType ?? this.selectionType,
+      assessment: assessment ?? this.assessment,
+      examNature: examNature ?? this.examNature,
+      deferredExam: deferredExam ?? this.deferredExam,
+      material: material ?? this.material,
+      courseDetailLink: courseDetailLink,
+      teachingRecordLink: teachingRecordLink,
+      processScoreLink: processScoreLink,
+      sessions: sessions ?? this.sessions,
+    );
+  }
+}
+
+class CourseKey {
+  const CourseKey({required this.courseCode, required this.sequence});
+
+  factory CourseKey.fromCourse(Course course) =>
+      CourseKey(courseCode: course.courseCode, sequence: course.sequence);
+
+  final String courseCode;
+  final String sequence;
+
+  String get value => '$courseCode::$sequence';
+
+  @override
+  bool operator ==(Object other) =>
+      other is CourseKey &&
+      other.courseCode == courseCode &&
+      other.sequence == sequence;
+
+  @override
+  int get hashCode => Object.hash(courseCode, sequence);
+}
+
+class CourseMetadata {
+  const CourseMetadata({
+    required this.name,
+    required this.teachers,
+    required this.credits,
+    required this.selectionType,
+    required this.assessment,
+    required this.examNature,
+    required this.deferredExam,
+    required this.material,
+  });
+
+  factory CourseMetadata.fromCourse(Course course) {
+    return CourseMetadata(
+      name: course.name,
+      teachers: course.teachers,
+      credits: course.credits,
+      selectionType: course.selectionType,
+      assessment: course.assessment,
+      examNature: course.examNature,
+      deferredExam: course.deferredExam,
+      material: course.material,
+    );
+  }
+
+  final String name;
+  final List<String> teachers;
+  final String credits;
+  final String selectionType;
+  final String assessment;
+  final String examNature;
+  final String deferredExam;
+  final String material;
+
+  CourseMetadata copyWith({
+    String? name,
+    List<String>? teachers,
+    String? credits,
+    String? selectionType,
+    String? assessment,
+    String? examNature,
+    String? deferredExam,
+    String? material,
+  }) {
+    return CourseMetadata(
+      name: name ?? this.name,
+      teachers: teachers ?? this.teachers,
+      credits: credits ?? this.credits,
+      selectionType: selectionType ?? this.selectionType,
+      assessment: assessment ?? this.assessment,
+      examNature: examNature ?? this.examNature,
+      deferredExam: deferredExam ?? this.deferredExam,
+      material: material ?? this.material,
+    );
+  }
+
+  Course applyTo(Course source, List<CourseSession> sessions) {
+    return source.copyWith(
+      name: name,
+      teachers: teachers,
+      credits: credits,
+      selectionType: selectionType,
+      assessment: assessment,
+      examNature: examNature,
+      deferredExam: deferredExam,
+      material: material,
+      sessions: sessions,
+    );
+  }
+}
+
+class CourseCustomization {
+  const CourseCustomization({
+    required this.courseKey,
+    required this.metadata,
+    required this.sessions,
+    this.isDeleted = false,
+  });
+
+  factory CourseCustomization.fromCourse(Course course) {
+    return CourseCustomization(
+      courseKey: CourseKey.fromCourse(course),
+      metadata: CourseMetadata.fromCourse(course),
+      sessions: course.sessions,
+    );
+  }
+
+  factory CourseCustomization.deleted(Course course) {
+    return CourseCustomization(
+      courseKey: CourseKey.fromCourse(course),
+      metadata: CourseMetadata.fromCourse(course),
+      sessions: course.sessions,
+      isDeleted: true,
+    );
+  }
+
+  final CourseKey courseKey;
+  final CourseMetadata metadata;
+  final List<CourseSession> sessions;
+  final bool isDeleted;
+
+  Course applyTo(Course source) => metadata.applyTo(source, sessions);
 }
 
 class ScheduledCourse {
@@ -177,6 +353,17 @@ class Semester {
 
   List<Course> get coursesWithoutFixedSchedule =>
       courses.where((course) => !course.hasFixedSchedule).toList();
+
+  Semester copyWith({List<Course>? courses}) {
+    return Semester(
+      id: id,
+      displayName: displayName,
+      termStartDate: termStartDate,
+      courses: courses ?? this.courses,
+      periods: periods,
+      sourceCourseHtml: sourceCourseHtml,
+    );
+  }
 
   List<ScheduledCourse> scheduledCoursesForWeek(int week) {
     final scheduled = <ScheduledCourse>[];
