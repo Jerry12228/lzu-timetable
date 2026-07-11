@@ -175,14 +175,9 @@ void main() {
       find.byKey(const ValueKey('quick-add-period-dropdown')),
       findsNothing,
     );
-    expect(
-      tester
-          .widget<FilterChip>(
-            find.byKey(const ValueKey('quick-add-section-第1节')),
-          )
-          .selected,
-      isTrue,
-    );
+    expect(find.byKey(const ValueKey('quick-add-section-第1节')), findsOneWidget);
+    expect(find.text('1'), findsOneWidget);
+    expect(find.text('午1'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('quick-add-weeks-button')));
     await tester.pumpAndSettle();
     expect(find.text('选择周次'), findsOneWidget);

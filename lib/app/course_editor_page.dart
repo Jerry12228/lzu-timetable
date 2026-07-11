@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/schedule_models.dart';
+import 'section_button_grid.dart';
 
 class CourseEditorPage extends StatefulWidget {
   const CourseEditorPage({
@@ -479,29 +480,11 @@ class _CourseSessionEditorDialogState
               const SizedBox(height: 12),
               const Text('上课节次', style: TextStyle(fontWeight: FontWeight.w800)),
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final period in _singleSectionPeriods)
-                    FilterChip(
-                      key: ValueKey(
-                        'session-section-${period.sections.single}',
-                      ),
-                      label: Text(_sectionButtonLabel(period.sections.single)),
-                      selected: _sections.contains(period.sections.single),
-                      onSelected: (selected) {
-                        setState(() {
-                          if (selected) {
-                            _sections.add(period.sections.single);
-                          } else {
-                            _sections.remove(period.sections.single);
-                          }
-                          _errorMessage = null;
-                        });
-                      },
-                    ),
-                ],
+              SectionButtonGrid(
+                periods: _singleSectionPeriods,
+                selectedSections: _sections,
+                keyPrefix: 'session-section',
+                onToggle: _toggleSection,
               ),
               if (_errorMessage != null) ...[
                 const SizedBox(height: 10),
@@ -568,9 +551,18 @@ class _CourseSessionEditorDialogState
     return indexes.isNotEmpty &&
         indexes.last - indexes.first + 1 == indexes.length;
   }
-}
 
-String _sectionButtonLabel(String section) => section.replaceAll('节', '');
+  void _toggleSection(String section) {
+    setState(() {
+      if (_sections.contains(section)) {
+        _sections.remove(section);
+      } else {
+        _sections.add(section);
+      }
+      _errorMessage = null;
+    });
+  }
+}
 
 String _sessionPeriodName(List<PeriodDefinition> periods) {
   if (periods.length == 1) {

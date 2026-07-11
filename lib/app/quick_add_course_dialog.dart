@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/schedule_models.dart';
+import 'section_button_grid.dart';
 
 class QuickAddCourseDialog extends StatefulWidget {
   const QuickAddCourseDialog({
@@ -95,29 +96,11 @@ class _QuickAddCourseDialogState extends State<QuickAddCourseDialog> {
               const SizedBox(height: 14),
               const Text('上课节次', style: TextStyle(fontWeight: FontWeight.w800)),
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final period in _singleSectionPeriods)
-                    FilterChip(
-                      key: ValueKey(
-                        'quick-add-section-${period.sections.single}',
-                      ),
-                      label: Text(_sectionLabel(period.sections.single)),
-                      selected: _sections.contains(period.sections.single),
-                      onSelected: (selected) {
-                        setState(() {
-                          if (selected) {
-                            _sections.add(period.sections.single);
-                          } else {
-                            _sections.remove(period.sections.single);
-                          }
-                          _errorMessage = null;
-                        });
-                      },
-                    ),
-                ],
+              SectionButtonGrid(
+                periods: _singleSectionPeriods,
+                selectedSections: _sections,
+                keyPrefix: 'quick-add-section',
+                onToggle: _toggleSection,
               ),
               const SizedBox(height: 14),
               TextField(
@@ -174,6 +157,17 @@ class _QuickAddCourseDialogState extends State<QuickAddCourseDialog> {
       _weeks
         ..clear()
         ..addAll(selectedWeeks);
+      _errorMessage = null;
+    });
+  }
+
+  void _toggleSection(String section) {
+    setState(() {
+      if (_sections.contains(section)) {
+        _sections.remove(section);
+      } else {
+        _sections.add(section);
+      }
       _errorMessage = null;
     });
   }
@@ -315,6 +309,7 @@ class _WeekSelectionDialogState extends State<_WeekSelectionDialog> {
                   key: ValueKey('quick-add-week-$week'),
                   label: Text('第$week周'),
                   selected: _weeks.contains(week),
+                  showCheckmark: false,
                   onSelected: (selected) {
                     setState(() {
                       if (selected) {
@@ -343,8 +338,6 @@ class _WeekSelectionDialogState extends State<_WeekSelectionDialog> {
     );
   }
 }
-
-String _sectionLabel(String section) => section.replaceAll('节', '');
 
 String _periodName(List<PeriodDefinition> periods) {
   if (periods.length == 1) {
