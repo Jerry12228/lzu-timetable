@@ -1,11 +1,11 @@
 {
-    "name": "course_schedule",
-    "short_name": "course_schedule",
+    "name": "课程表",
+    "short_name": "课程表",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#FFFFFF",
+    "theme_color": "#0F766E",
+    "description": "课程表",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
