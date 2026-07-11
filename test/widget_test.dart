@@ -168,26 +168,41 @@ void main() {
 
     expect(find.text('添加课程'), findsOneWidget);
     expect(
+      find.byKey(const ValueKey('quick-add-weeks-button')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('quick-add-period-dropdown')),
+      findsNothing,
+    );
+    expect(
+      tester
+          .widget<FilterChip>(
+            find.byKey(const ValueKey('quick-add-section-第1节')),
+          )
+          .selected,
+      isTrue,
+    );
+    await tester.tap(find.byKey(const ValueKey('quick-add-weeks-button')));
+    await tester.pumpAndSettle();
+    expect(find.text('选择周次'), findsOneWidget);
+    expect(
       tester
           .widget<FilterChip>(find.byKey(const ValueKey('quick-add-week-1')))
           .selected,
       isTrue,
     );
-    expect(
-      tester
-          .widget<DropdownButtonFormField<String>>(
-            find.byKey(const ValueKey('quick-add-period-dropdown')),
-          )
-          .initialValue,
-      '第1节',
+    await tester.tap(find.byKey(const ValueKey('quick-add-week-2')));
+    await tester.tap(
+      find.byKey(const ValueKey('quick-add-weeks-confirm-button')),
     );
+    await tester.pumpAndSettle();
 
     await tester.enterText(
       find.byKey(const ValueKey('quick-add-name-field')),
       '手动新增课程',
     );
-    await tester.tap(find.byKey(const ValueKey('quick-add-week-2')));
-    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('quick-add-section-第2节')));
     await tester.tap(find.byKey(const ValueKey('quick-add-save-button')));
     await tester.pumpAndSettle();
 
@@ -198,6 +213,7 @@ void main() {
     );
     expect(course.isManual, isTrue);
     expect(course.sessions.map((session) => session.week), [1, 2]);
+    expect(course.sessions.first.sections, ['第1节', '第2节']);
 
     await tester.tap(find.text('第1周').last);
     await tester.pumpAndSettle();
@@ -234,6 +250,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('session-week-rule-field')), findsNothing);
     expect(find.byKey(const ValueKey('session-week-dropdown')), findsOneWidget);
+    expect(find.byKey(const ValueKey('session-section-第1节')), findsOneWidget);
+    expect(find.text('上课大节'), findsNothing);
     expect(find.text('地点'), findsNothing);
     await tester.tap(find.byKey(const ValueKey('session-week-dropdown')));
     await tester.pumpAndSettle();

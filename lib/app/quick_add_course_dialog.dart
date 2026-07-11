@@ -22,8 +22,8 @@ class _QuickAddCourseDialogState extends State<QuickAddCourseDialog> {
   final _nameController = TextEditingController();
   final _locationController = TextEditingController();
   late final Set<int> _weeks = {widget.selection.week};
+  late final Set<String> _sections = {widget.selection.section};
   late int _weekday = widget.selection.weekday;
-  late PeriodDefinition _period = _defaultPeriod();
   String? _errorMessage;
 
   int get _maxWeek =>
@@ -57,29 +57,11 @@ class _QuickAddCourseDialogState extends State<QuickAddCourseDialog> {
                 ),
               ),
               const SizedBox(height: 14),
-              const Text('周次', style: TextStyle(fontWeight: FontWeight.w800)),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (var week = 1; week <= _maxWeek; week++)
-                    FilterChip(
-                      key: ValueKey('quick-add-week-$week'),
-                      label: Text('第$week周'),
-                      selected: _weeks.contains(week),
-                      onSelected: (selected) {
-                        setState(() {
-                          if (selected) {
-                            _weeks.add(week);
-                          } else {
-                            _weeks.remove(week);
-                          }
-                          _errorMessage = null;
-                        });
-                      },
-                    ),
-                ],
+              OutlinedButton.icon(
+                key: const ValueKey('quick-add-weeks-button'),
+                onPressed: _chooseWeeks,
+                icon: const Icon(Icons.date_range_outlined),
+                label: Text('选择周次（已选 ${_weeks.length} 周）'),
               ),
               const SizedBox(height: 10),
               Text(
@@ -111,32 +93,31 @@ class _QuickAddCourseDialogState extends State<QuickAddCourseDialog> {
                 },
               ),
               const SizedBox(height: 14),
-              DropdownButtonFormField<String>(
-                key: const ValueKey('quick-add-period-dropdown'),
-                initialValue: _period.name,
-                decoration: const InputDecoration(
-                  labelText: '上课节次',
-                  border: OutlineInputBorder(),
-                ),
-                items: [
-                  for (final period in widget.semester.periods)
-                    DropdownMenuItem(
-                      value: period.name,
-                      child: Text(
-                        '${period.name} ${period.startTime}-${period.endTime}',
+              const Text('上课节次', style: TextStyle(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final period in _singleSectionPeriods)
+                    FilterChip(
+                      key: ValueKey(
+                        'quick-add-section-${period.sections.single}',
                       ),
+                      label: Text(_sectionLabel(period.sections.single)),
+                      selected: _sections.contains(period.sections.single),
+                      onSelected: (selected) {
+                        setState(() {
+                          if (selected) {
+                            _sections.add(period.sections.single);
+                          } else {
+                            _sections.remove(period.sections.single);
+                          }
+                          _errorMessage = null;
+                        });
+                      },
                     ),
                 ],
-                onChanged: (name) {
-                  if (name != null) {
-                    setState(() {
-                      _period = widget.semester.periods.firstWhere(
-                        (period) => period.name == name,
-                      );
-                      _errorMessage = null;
-                    });
-                  }
-                },
               ),
               const SizedBox(height: 14),
               TextField(
@@ -172,13 +153,29 @@ class _QuickAddCourseDialogState extends State<QuickAddCourseDialog> {
     );
   }
 
-  PeriodDefinition _defaultPeriod() {
-    return widget.semester.periods.firstWhere(
-      (period) =>
-          period.sections.length == 1 &&
-          period.sections.single == widget.selection.section,
-      orElse: () => widget.semester.periods.first,
+  List<PeriodDefinition> get _singleSectionPeriods => [
+    for (final section in timetableSectionOrder)
+      widget.semester.periods.firstWhere(
+        (period) =>
+            period.sections.length == 1 && period.sections.single == section,
+      ),
+  ];
+
+  Future<void> _chooseWeeks() async {
+    final selectedWeeks = await showDialog<Set<int>>(
+      context: context,
+      builder: (context) =>
+          _WeekSelectionDialog(maxWeek: _maxWeek, selectedWeeks: _weeks),
     );
+    if (selectedWeeks == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _weeks
+        ..clear()
+        ..addAll(selectedWeeks);
+      _errorMessage = null;
+    });
   }
 
   String _selectedDateSummary() {
@@ -213,6 +210,14 @@ class _QuickAddCourseDialogState extends State<QuickAddCourseDialog> {
       setState(() => _errorMessage = '请选择至少一个周次');
       return;
     }
+    if (_sections.isEmpty) {
+      setState(() => _errorMessage = '请选择至少一节课');
+      return;
+    }
+    if (!_hasContinuousSections) {
+      setState(() => _errorMessage = '上课节次必须连续');
+      return;
+    }
     final course = _buildCourse(name);
     final conflict = widget.validateCourse(course);
     if (conflict != null) {
@@ -226,6 +231,9 @@ class _QuickAddCourseDialogState extends State<QuickAddCourseDialog> {
     final code =
         '$manualCourseCodePrefix${DateTime.now().microsecondsSinceEpoch}';
     final sortedWeeks = _weeks.toList()..sort();
+    final selectedPeriods = _selectedSectionPeriods;
+    final firstPeriod = selectedPeriods.first;
+    final lastPeriod = selectedPeriods.last;
     return Course(
       courseCode: code,
       sequence: 'local',
@@ -246,15 +254,103 @@ class _QuickAddCourseDialogState extends State<QuickAddCourseDialog> {
             week: week,
             weekday: _weekday,
             weekdayText: weekdays[_weekday - 1],
-            periodName: _period.name,
-            startTime: _period.startTime,
-            endTime: _period.endTime,
-            sections: _period.sections,
+            periodName: _periodName(selectedPeriods),
+            startTime: firstPeriod.startTime,
+            endTime: lastPeriod.endTime,
+            sections: [
+              for (final period in selectedPeriods) period.sections.single,
+            ],
             location: _locationController.text.trim(),
           ),
       ],
     );
   }
+
+  List<PeriodDefinition> get _selectedSectionPeriods => [
+    for (final period in _singleSectionPeriods)
+      if (_sections.contains(period.sections.single)) period,
+  ];
+
+  bool get _hasContinuousSections {
+    final indexes = [
+      for (var index = 0; index < timetableSectionOrder.length; index++)
+        if (_sections.contains(timetableSectionOrder[index])) index,
+    ];
+    if (indexes.isEmpty) {
+      return false;
+    }
+    return indexes.last - indexes.first + 1 == indexes.length;
+  }
+}
+
+class _WeekSelectionDialog extends StatefulWidget {
+  const _WeekSelectionDialog({
+    required this.maxWeek,
+    required this.selectedWeeks,
+  });
+
+  final int maxWeek;
+  final Set<int> selectedWeeks;
+
+  @override
+  State<_WeekSelectionDialog> createState() => _WeekSelectionDialogState();
+}
+
+class _WeekSelectionDialogState extends State<_WeekSelectionDialog> {
+  late final Set<int> _weeks = {...widget.selectedWeeks};
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('选择周次'),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: SingleChildScrollView(
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (var week = 1; week <= widget.maxWeek; week++)
+                FilterChip(
+                  key: ValueKey('quick-add-week-$week'),
+                  label: Text('第$week周'),
+                  selected: _weeks.contains(week),
+                  onSelected: (selected) {
+                    setState(() {
+                      if (selected) {
+                        _weeks.add(week);
+                      } else {
+                        _weeks.remove(week);
+                      }
+                    });
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          key: const ValueKey('quick-add-weeks-confirm-button'),
+          onPressed: () => Navigator.of(context).pop(_weeks),
+          child: const Text('确定'),
+        ),
+      ],
+    );
+  }
+}
+
+String _sectionLabel(String section) => section.replaceAll('节', '');
+
+String _periodName(List<PeriodDefinition> periods) {
+  if (periods.length == 1) {
+    return periods.single.name;
+  }
+  return '${periods.first.sections.single}至${periods.last.sections.single}';
 }
 
 String _formatMonthDay(DateTime date) {

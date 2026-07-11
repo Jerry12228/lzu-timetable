@@ -413,7 +413,8 @@ class _CourseSessionEditorDialogState
     extends State<_CourseSessionEditorDialog> {
   late int _week;
   late int _weekday;
-  late String _periodName;
+  late Set<String> _sections;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -421,10 +422,10 @@ class _CourseSessionEditorDialogState
     final session = widget.initialSession;
     _week = session?.week ?? 1;
     _weekday = session?.weekday ?? 1;
-    _periodName =
-        widget.periods.any((period) => period.name == session?.periodName)
-        ? session!.periodName
-        : widget.periods.first.name;
+    _sections = {
+      ...(session?.sections ?? const []),
+      if (session == null) _singleSectionPeriods.first.sections.single,
+    };
   }
 
   @override
@@ -436,6 +437,7 @@ class _CourseSessionEditorDialogState
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               DropdownButtonFormField<int>(
                 key: const ValueKey('session-week-dropdown'),
@@ -475,25 +477,39 @@ class _CourseSessionEditorDialogState
                 },
               ),
               const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: _periodName,
-                decoration: const InputDecoration(
-                  labelText: '上课大节',
-                  border: OutlineInputBorder(),
-                ),
-                items: [
-                  for (final period in widget.periods)
-                    DropdownMenuItem(
-                      value: period.name,
-                      child: Text(period.name),
+              const Text('上课节次', style: TextStyle(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final period in _singleSectionPeriods)
+                    FilterChip(
+                      key: ValueKey(
+                        'session-section-${period.sections.single}',
+                      ),
+                      label: Text(_sectionButtonLabel(period.sections.single)),
+                      selected: _sections.contains(period.sections.single),
+                      onSelected: (selected) {
+                        setState(() {
+                          if (selected) {
+                            _sections.add(period.sections.single);
+                          } else {
+                            _sections.remove(period.sections.single);
+                          }
+                          _errorMessage = null;
+                        });
+                      },
                     ),
                 ],
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() => _periodName = value);
-                  }
-                },
               ),
+              if (_errorMessage != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  _errorMessage!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
             ],
           ),
         ),
@@ -509,21 +525,58 @@ class _CourseSessionEditorDialogState
   }
 
   void _save() {
-    final period = widget.periods.firstWhere(
-      (item) => item.name == _periodName,
-    );
+    if (_sections.isEmpty) {
+      setState(() => _errorMessage = '请选择至少一节课');
+      return;
+    }
+    if (!_hasContinuousSections) {
+      setState(() => _errorMessage = '上课节次必须连续');
+      return;
+    }
+    final periods = _selectedSectionPeriods;
     final session = CourseSession(
       week: _week,
       weekday: _weekday,
       weekdayText: weekdays[_weekday - 1],
-      periodName: period.name,
-      startTime: period.startTime,
-      endTime: period.endTime,
-      sections: period.sections,
+      periodName: _sessionPeriodName(periods),
+      startTime: periods.first.startTime,
+      endTime: periods.last.endTime,
+      sections: [for (final period in periods) period.sections.single],
       location: widget.initialSession?.location ?? '',
     );
     Navigator.of(context).pop(session);
   }
+
+  List<PeriodDefinition> get _singleSectionPeriods => [
+    for (final section in timetableSectionOrder)
+      widget.periods.firstWhere(
+        (period) =>
+            period.sections.length == 1 && period.sections.single == section,
+      ),
+  ];
+
+  List<PeriodDefinition> get _selectedSectionPeriods => [
+    for (final period in _singleSectionPeriods)
+      if (_sections.contains(period.sections.single)) period,
+  ];
+
+  bool get _hasContinuousSections {
+    final indexes = [
+      for (var index = 0; index < timetableSectionOrder.length; index++)
+        if (_sections.contains(timetableSectionOrder[index])) index,
+    ];
+    return indexes.isNotEmpty &&
+        indexes.last - indexes.first + 1 == indexes.length;
+  }
+}
+
+String _sectionButtonLabel(String section) => section.replaceAll('节', '');
+
+String _sessionPeriodName(List<PeriodDefinition> periods) {
+  if (periods.length == 1) {
+    return periods.single.name;
+  }
+  return '${periods.first.sections.single}至${periods.last.sections.single}';
 }
 
 List<String> _splitTeachers(String value) {

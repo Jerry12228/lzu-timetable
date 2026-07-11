@@ -1,5 +1,22 @@
 const weekdays = <String>['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'];
 
+const timetableSectionOrder = <String>[
+  '第1节',
+  '第2节',
+  '第3节',
+  '第4节',
+  '中午1节',
+  '中午2节',
+  '第5节',
+  '第6节',
+  '第7节',
+  '第8节',
+  '第9节',
+  '第10节',
+  '第11节',
+  '第12节',
+];
+
 const manualCourseCodePrefix = 'local-manual-';
 
 class TimetableCellSelection {
