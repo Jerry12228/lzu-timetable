@@ -37,6 +37,7 @@ class ImportSchedulePage extends StatefulWidget {
 class _ImportSchedulePageState extends State<ImportSchedulePage> {
   final _nameController = TextEditingController();
   final _dateController = TextEditingController();
+  final _weekCountController = TextEditingController();
   final _htmlController = TextEditingController();
 
   Semester? _preview;
@@ -53,9 +54,14 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
     if (initialDate != null) {
       _dateController.text = _formatDate(initialDate);
     }
+    final initialSemester = widget.initialSemester;
+    if (initialSemester != null) {
+      _weekCountController.text = initialSemester.maxWeek.toString();
+    }
     _htmlController.text = widget.initialCourseHtml ?? '';
     _nameController.addListener(_invalidatePreview);
     _dateController.addListener(_invalidatePreview);
+    _weekCountController.addListener(_invalidatePreview);
     _htmlController.addListener(_invalidatePreview);
   }
 
@@ -63,6 +69,7 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
   void dispose() {
     _nameController.dispose();
     _dateController.dispose();
+    _weekCountController.dispose();
     _htmlController.dispose();
     super.dispose();
   }
@@ -90,6 +97,17 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
                     controller: _nameController,
                     decoration: const InputDecoration(
                       labelText: '课表名称',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    key: const ValueKey('import-week-count-field'),
+                    controller: _weekCountController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: '学期总周数',
+                      helperText: '不得小于最后有课周',
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -171,7 +189,7 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
   }
 
   String get _currentInputKey =>
-      '${_nameController.text.trim()}|${_dateController.text.trim()}|${_htmlController.text}';
+      '${_nameController.text.trim()}|${_dateController.text.trim()}|${_weekCountController.text.trim()}|${_htmlController.text}';
 
   void _invalidatePreview() {
     if (_preview == null && _errorMessage == null) {
@@ -271,23 +289,42 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
     final displayName = _validatedDisplayName();
     final termStartDate = _validatedStartDate();
     final courseHtml = _htmlController.text.trim();
+    final Semester semester;
     if (courseHtml.isEmpty) {
       final initialSemester = widget.initialSemester;
       if (initialSemester == null) {
         throw const FormatException('请粘贴或上传课程列表 HTML');
       }
-      return initialSemester.copyWith(
+      semester = initialSemester.copyWith(
         id: widget.editingSemesterId ?? initialSemester.id,
         displayName: displayName,
         termStartDate: termStartDate,
       );
+    } else {
+      semester = SemesterImporter.parseCourseHtml(
+        semesterId: widget.editingSemesterId ?? 'preview',
+        displayName: displayName,
+        termStartDate: termStartDate,
+        courseHtml: courseHtml,
+      );
     }
-    return SemesterImporter.parseCourseHtml(
-      semesterId: widget.editingSemesterId ?? 'preview',
-      displayName: displayName,
-      termStartDate: termStartDate,
-      courseHtml: courseHtml,
+    if (_weekCountController.text.trim().isEmpty) {
+      _weekCountController.text = semester.lastScheduledWeek.toString();
+    }
+    return semester.copyWith(
+      weekCount: _validatedWeekCount(semester.lastScheduledWeek),
     );
+  }
+
+  int _validatedWeekCount(int minimumWeek) {
+    final value = int.tryParse(_weekCountController.text.trim());
+    if (value == null || value < 1) {
+      throw const FormatException('请输入有效的学期总周数');
+    }
+    if (value < minimumWeek) {
+      throw FormatException('学期总周数不得小于第$minimumWeek周');
+    }
+    return value;
   }
 
   String _validatedDisplayName() {

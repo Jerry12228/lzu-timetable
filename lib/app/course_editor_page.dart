@@ -217,7 +217,7 @@ class _CourseEditorPageState extends State<CourseEditorPage> {
       context: context,
       builder: (context) => _CourseSessionEditorDialog(
         periods: widget.semester.periods,
-        maxWeek: widget.semester.maxWeek < 20 ? 20 : widget.semester.maxWeek,
+        maxWeek: widget.semester.maxWeek,
         initialSession: index == null ? null : _sessions[index],
       ),
     );

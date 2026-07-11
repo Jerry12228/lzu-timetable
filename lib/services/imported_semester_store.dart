@@ -79,7 +79,9 @@ class ImportedSemesterStore {
       } else {
         records.add(ImportedSemesterRecord.fromJson(json));
         requiresMigration =
-            requiresMigration || _containsLegacyWeekRules(json['semester']);
+            requiresMigration ||
+            _containsLegacyWeekRules(json['semester']) ||
+            _isMissingWeekCount(json['semester']);
       }
     }
     records.sort((a, b) => a.createdAt.compareTo(b.createdAt));
@@ -190,4 +192,11 @@ bool _containsLegacyWeekRules(Object? value) {
     List() => value.any(_containsLegacyWeekRules),
     _ => false,
   };
+}
+
+bool _isMissingWeekCount(Object? value) {
+  if (value is! Map) {
+    return false;
+  }
+  return !value.containsKey('weekCount');
 }

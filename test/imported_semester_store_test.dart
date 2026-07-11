@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:course_schedule/models/schedule_models.dart';
 import 'package:course_schedule/services/imported_semester_store.dart';
 import 'package:course_schedule/services/semester_importer.dart';
+import 'package:course_schedule/services/semester_json_codec.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -24,6 +25,7 @@ void main() {
     expect(raw, isNot(contains('courseHtml')));
     expect(raw, isNot(contains('weekRule')));
     expect(raw, isNot(contains('<table')));
+    expect(raw, contains('"weekCount":17'));
     expect((jsonDecode(raw) as Map)['semester'], isA<Map>());
 
     final records = await store.loadRecords();
@@ -61,6 +63,30 @@ void main() {
         .single;
     expect(migrated, isNot(contains('courseHtml')));
     expect(migrated, contains('"semester"'));
+    expect(migrated, contains('"weekCount":17'));
+  });
+
+  test('migrates parsed records that lack a configured week count', () async {
+    final semesterJson = SemesterJsonCodec.toJson(_sampleSemester());
+    semesterJson.remove('weekCount');
+    SharedPreferences.setMockInitialValues({
+      'course_schedule_imported_semesters_v1': [
+        jsonEncode({
+          'semester': semesterJson,
+          'createdAt': '2026-01-01T00:00:00.000',
+        }),
+      ],
+    });
+    final preferences = await SharedPreferences.getInstance();
+    final store = ImportedSemesterStore(preferences: preferences);
+
+    final records = await store.loadRecords();
+
+    expect(records.single.semester.maxWeek, 17);
+    final migrated = preferences
+        .getStringList('course_schedule_imported_semesters_v1')!
+        .single;
+    expect(migrated, contains('"weekCount":17'));
   });
 
   test('rejects duplicate display names before saving', () async {

@@ -14,11 +14,13 @@ class CourseScheduleApp extends StatelessWidget {
     this.semestersFuture,
     this.importedSemesterStore,
     this.courseCustomizationStore,
+    this.currentDate,
   });
 
   final Future<List<Semester>>? semestersFuture;
   final ImportedSemesterStore? importedSemesterStore;
   final CourseCustomizationStore? courseCustomizationStore;
+  final DateTime? currentDate;
 
   @override
   Widget build(BuildContext context) {
@@ -34,6 +36,7 @@ class CourseScheduleApp extends StatelessWidget {
         semestersFuture: semestersFuture,
         importedSemesterStore: importedSemesterStore,
         courseCustomizationStore: courseCustomizationStore,
+        currentDate: currentDate,
       ),
     );
   }
@@ -44,11 +47,13 @@ class _SemesterBootstrap extends StatefulWidget {
     required this.semestersFuture,
     required this.importedSemesterStore,
     required this.courseCustomizationStore,
+    required this.currentDate,
   });
 
   final Future<List<Semester>>? semestersFuture;
   final ImportedSemesterStore? importedSemesterStore;
   final CourseCustomizationStore? courseCustomizationStore;
+  final DateTime? currentDate;
 
   @override
   State<_SemesterBootstrap> createState() => _SemesterBootstrapState();
@@ -101,6 +106,7 @@ class _SemesterBootstrapState extends State<_SemesterBootstrap> {
           onManageRequested: _openManagementPage,
           onCourseCustomizationSaved: _saveCourseCustomization,
           onManualCourseSaved: _saveManualCourse,
+          currentDate: widget.currentDate,
         );
       },
     );
@@ -165,6 +171,7 @@ class ScheduleHome extends StatefulWidget {
     this.onManageRequested,
     this.onCourseCustomizationSaved,
     this.onManualCourseSaved,
+    this.currentDate,
   });
 
   final List<Semester> semesters;
@@ -177,6 +184,7 @@ class ScheduleHome extends StatefulWidget {
   onCourseCustomizationSaved;
   final Future<void> Function(String semesterId, Course course)?
   onManualCourseSaved;
+  final DateTime? currentDate;
 
   @override
   State<ScheduleHome> createState() => _ScheduleHomeState();
@@ -184,13 +192,18 @@ class ScheduleHome extends StatefulWidget {
 
 class _ScheduleHomeState extends State<ScheduleHome> {
   late Semester _selectedSemester;
-  int _selectedWeek = 1;
+  late int _selectedWeek;
+  late DateTime _today;
 
   @override
   void initState() {
     super.initState();
+    _today = _dateOnly(widget.currentDate ?? DateTime.now());
     _selectedSemester =
-        _semesterForId(widget.selectedSemesterId) ?? widget.semesters.first;
+        _semesterForId(widget.selectedSemesterId) ??
+        _semesterForToday() ??
+        widget.semesters.first;
+    _selectedWeek = _selectedSemester.weekForDate(_today);
   }
 
   @override
@@ -200,7 +213,7 @@ class _ScheduleHomeState extends State<ScheduleHome> {
     if (widget.selectedSemesterId != oldWidget.selectedSemesterId &&
         requestedSemester != null) {
       _selectedSemester = requestedSemester;
-      _selectedWeek = 1;
+      _selectedWeek = _selectedSemester.weekForDate(_today);
       return;
     }
     final refreshedSemester = _semesterForId(_selectedSemester.id);
@@ -208,7 +221,7 @@ class _ScheduleHomeState extends State<ScheduleHome> {
       _selectedSemester = refreshedSemester;
     } else {
       _selectedSemester = widget.semesters.first;
-      _selectedWeek = 1;
+      _selectedWeek = _selectedSemester.weekForDate(_today);
     }
     if (_selectedWeek > _selectedSemester.maxWeek) {
       _selectedWeek = _selectedSemester.maxWeek;
@@ -270,6 +283,7 @@ class _ScheduleHomeState extends State<ScheduleHome> {
                     weekDateRange: _selectedSemester.dateRangeForWeek(
                       _selectedWeek,
                     ),
+                    today: _today,
                     onCourseTap: _showCourseDetails,
                     onEmptyCellTap: widget.onManualCourseSaved == null
                         ? null
@@ -287,7 +301,7 @@ class _ScheduleHomeState extends State<ScheduleHome> {
   void _selectSemester(Semester semester) {
     setState(() {
       _selectedSemester = semester;
-      _selectedWeek = _selectedWeek.clamp(1, semester.maxWeek);
+      _selectedWeek = semester.weekForDate(_today);
     });
   }
 
@@ -370,7 +384,18 @@ class _ScheduleHomeState extends State<ScheduleHome> {
     }
     return null;
   }
+
+  Semester? _semesterForToday() {
+    final matching =
+        widget.semesters
+            .where((semester) => semester.containsDate(_today))
+            .toList()
+          ..sort((a, b) => a.termStartDate!.compareTo(b.termStartDate!));
+    return matching.isEmpty ? null : matching.last;
+  }
 }
+
+DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
 
 class _ScheduleControls extends StatelessWidget {
   const _ScheduleControls({

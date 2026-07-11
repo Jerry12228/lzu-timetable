@@ -312,6 +312,7 @@ class Semester {
     required this.termStartDate,
     required this.courses,
     required this.periods,
+    this.weekCount = 0,
   });
 
   final String id;
@@ -319,8 +320,9 @@ class Semester {
   final DateTime? termStartDate;
   final List<Course> courses;
   final List<PeriodDefinition> periods;
+  final int weekCount;
 
-  int get maxWeek {
+  int get lastScheduledWeek {
     var maxWeek = 1;
     for (final course in courses) {
       for (final session in course.sessions) {
@@ -332,6 +334,9 @@ class Semester {
     return maxWeek;
   }
 
+  int get maxWeek =>
+      weekCount > lastScheduledWeek ? weekCount : lastScheduledWeek;
+
   List<Course> get coursesWithoutFixedSchedule =>
       courses.where((course) => !course.hasFixedSchedule).toList();
 
@@ -341,6 +346,7 @@ class Semester {
     DateTime? termStartDate,
     List<Course>? courses,
     List<PeriodDefinition>? periods,
+    int? weekCount,
   }) {
     return Semester(
       id: id ?? this.id,
@@ -348,6 +354,7 @@ class Semester {
       termStartDate: termStartDate ?? this.termStartDate,
       courses: courses ?? this.courses,
       periods: periods ?? this.periods,
+      weekCount: weekCount ?? this.weekCount,
     );
   }
 
@@ -388,7 +395,36 @@ class Semester {
     ).add(Duration(days: (week - 1) * 7));
     return DateRange(start: start, end: start.add(const Duration(days: 6)));
   }
+
+  bool containsDate(DateTime date) {
+    final firstWeek = dateRangeForWeek(1);
+    final lastWeek = dateRangeForWeek(maxWeek);
+    if (firstWeek == null || lastWeek == null) {
+      return false;
+    }
+    final normalized = _dateOnly(date);
+    return !normalized.isBefore(firstWeek.start) &&
+        !normalized.isAfter(lastWeek.end);
+  }
+
+  int weekForDate(DateTime date) {
+    final firstWeek = dateRangeForWeek(1);
+    final lastWeek = dateRangeForWeek(maxWeek);
+    if (firstWeek == null || lastWeek == null) {
+      return 1;
+    }
+    final normalized = _dateOnly(date);
+    if (normalized.isBefore(firstWeek.start)) {
+      return 1;
+    }
+    if (normalized.isAfter(lastWeek.end)) {
+      return maxWeek;
+    }
+    return normalized.difference(firstWeek.start).inDays ~/ 7 + 1;
+  }
 }
+
+DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
 
 int parseClockMinutes(String value) {
   final parts = value.split(':');

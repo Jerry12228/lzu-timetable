@@ -11,6 +11,7 @@ class TimetableGrid extends StatelessWidget {
     this.selectedWeek,
     this.onEmptyCellTap,
     this.weekDateRange,
+    this.today,
   });
 
   final bool compact;
@@ -19,6 +20,7 @@ class TimetableGrid extends StatelessWidget {
   final int? selectedWeek;
   final ValueChanged<TimetableCellSelection>? onEmptyCellTap;
   final DateRange? weekDateRange;
+  final DateTime? today;
 
   static const _headerHeight = 44.0;
   static const _datedHeaderHeight = 58.0;
@@ -56,6 +58,7 @@ class TimetableGrid extends StatelessWidget {
             scheduled: scheduled,
             selectedWeek: selectedWeek,
             weekDateRange: weekDateRange,
+            today: today,
             dense: denseMobile,
             onCourseTap: onCourseTap,
             onEmptyCellTap: onEmptyCellTap,
@@ -91,6 +94,7 @@ class _TimetableCanvas extends StatelessWidget {
     required this.scheduled,
     required this.selectedWeek,
     required this.weekDateRange,
+    required this.today,
     required this.dense,
     required this.onCourseTap,
     required this.onEmptyCellTap,
@@ -103,6 +107,7 @@ class _TimetableCanvas extends StatelessWidget {
   final List<ScheduledCourse> scheduled;
   final int? selectedWeek;
   final DateRange? weekDateRange;
+  final DateTime? today;
   final bool dense;
   final void Function(Course course, CourseSession? session) onCourseTap;
   final ValueChanged<TimetableCellSelection>? onEmptyCellTap;
@@ -129,11 +134,19 @@ class _TimetableCanvas extends StatelessWidget {
             _CornerCell(width: leftWidth, height: headerHeight, dense: dense),
             for (var day = 0; day < weekdays.length; day++)
               _HeaderCell(
+                key: ValueKey('timetable-header-${day + 1}'),
                 left: leftWidth + day * dayWidth,
                 width: dayWidth,
                 height: headerHeight,
                 label: weekdays[day],
                 date: weekDateRange?.start.add(Duration(days: day)),
+                isToday:
+                    today != null &&
+                    weekDateRange != null &&
+                    DateUtils.isSameDay(
+                      weekDateRange!.start.add(Duration(days: day)),
+                      today,
+                    ),
                 dense: dense,
               ),
             for (var index = 0; index < _timetableSections.length; index++)
@@ -269,11 +282,13 @@ class _CornerCell extends StatelessWidget {
 
 class _HeaderCell extends StatelessWidget {
   const _HeaderCell({
+    super.key,
     required this.left,
     required this.width,
     required this.height,
     required this.label,
     required this.date,
+    required this.isToday,
     required this.dense,
   });
 
@@ -282,6 +297,7 @@ class _HeaderCell extends StatelessWidget {
   final double height;
   final String label;
   final DateTime? date;
+  final bool isToday;
   final bool dense;
 
   @override
@@ -292,7 +308,9 @@ class _HeaderCell extends StatelessWidget {
       width: width,
       height: height,
       child: _TableCellShell(
-        background: Theme.of(context).colorScheme.surfaceContainerHighest,
+        background: isToday
+            ? Theme.of(context).colorScheme.primaryContainer
+            : Theme.of(context).colorScheme.surfaceContainerHighest,
         dense: dense,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -302,6 +320,9 @@ class _HeaderCell extends StatelessWidget {
               style: TextStyle(
                 fontSize: dense ? 10 : 14,
                 fontWeight: FontWeight.w800,
+                color: isToday
+                    ? Theme.of(context).colorScheme.onPrimaryContainer
+                    : null,
               ),
             ),
             if (date != null) ...[
@@ -312,7 +333,9 @@ class _HeaderCell extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: dense ? 8.5 : 11.5,
-                  color: Colors.black54,
+                  color: isToday
+                      ? Theme.of(context).colorScheme.onPrimaryContainer
+                      : Colors.black54,
                   fontWeight: FontWeight.w600,
                 ),
               ),

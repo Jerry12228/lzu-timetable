@@ -76,6 +76,35 @@ void main() {
     expect(semester.maxWeek, 17);
   });
 
+  test('uses configured week count while keeping the final course week', () {
+    final extended = semester.copyWith(
+      termStartDate: DateTime(2026, 2, 23),
+      weekCount: 20,
+    );
+
+    expect(extended.lastScheduledWeek, 17);
+    expect(extended.maxWeek, 20);
+    expect(extended.weekForDate(DateTime(2026, 2, 22)), 1);
+    expect(extended.weekForDate(DateTime(2026, 7, 6)), 20);
+    expect(extended.weekForDate(DateTime(2026, 7, 13)), 20);
+    expect(extended.containsDate(DateTime(2026, 7, 6)), isTrue);
+    expect(extended.containsDate(DateTime(2026, 7, 13)), isFalse);
+
+    final withoutLateCourses = extended.copyWith(
+      courses: [
+        for (final course in extended.courses)
+          course.copyWith(
+            sessions: [
+              for (final session in course.sessions)
+                if (session.week <= 16) session,
+            ],
+          ),
+      ],
+    );
+    expect(withoutLateCourses.lastScheduledWeek, 16);
+    expect(withoutLateCourses.maxWeek, 20);
+  });
+
   test('expands imported schedules into individual weekly sessions', () {
     final botanyLab = semester.courses.firstWhere(
       (course) => course.name == '植物学实验',

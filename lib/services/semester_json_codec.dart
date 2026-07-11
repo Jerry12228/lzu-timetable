@@ -9,24 +9,27 @@ class SemesterJsonCodec {
       'id': semester.id,
       'displayName': semester.displayName,
       'termStartDate': _dateToJson(semester.termStartDate),
+      'weekCount': semester.maxWeek,
       'courses': [for (final course in semester.courses) courseToJson(course)],
       'periods': [for (final period in semester.periods) _periodToJson(period)],
     };
   }
 
   static Semester fromJson(Map<String, Object?> json) {
+    final courses = [
+      for (final course in _objectList(json['courses'], 'courses'))
+        courseFromJson(course),
+    ];
     return Semester(
       id: _string(json, 'id'),
       displayName: _string(json, 'displayName'),
       termStartDate: _dateFromJson(json['termStartDate']),
-      courses: [
-        for (final course in _objectList(json['courses'], 'courses'))
-          courseFromJson(course),
-      ],
+      courses: courses,
       periods: [
         for (final period in _objectList(json['periods'], 'periods'))
           _periodFromJson(period),
       ],
+      weekCount: _optionalPositiveInteger(json['weekCount']),
     );
   }
 
@@ -193,6 +196,16 @@ int _integer(Map<String, Object?> json, String field) {
   final value = json[field];
   if (value is! int) {
     throw FormatException('Missing course schedule $field');
+  }
+  return value;
+}
+
+int _optionalPositiveInteger(Object? value) {
+  if (value == null) {
+    return 0;
+  }
+  if (value is! int || value < 1) {
+    throw const FormatException('Invalid course schedule week count');
   }
   return value;
 }

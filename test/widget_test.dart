@@ -21,6 +21,63 @@ void main() {
     expect(find.text('2025-2026-2学期'), findsNothing);
   });
 
+  testWidgets('selects the current semester and highlights only today header', (
+    tester,
+  ) async {
+    final earlier = semester.copyWith(
+      id: 'earlier',
+      displayName: '较早课表',
+      termStartDate: DateTime(2026, 1, 5),
+    );
+    final current = semester.copyWith(
+      id: 'current',
+      displayName: '当前课表',
+      termStartDate: DateTime(2026, 2, 23),
+    );
+    final store = await _emptyStore();
+    await tester.pumpWidget(
+      CourseScheduleApp(
+        semestersFuture: Future.value([earlier, current]),
+        importedSemesterStore: store,
+        currentDate: DateTime(2026, 4, 1),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('当前课表'), findsOneWidget);
+    expect(find.text('03-30'), findsOneWidget);
+    final scheme = Theme.of(
+      tester.element(find.byKey(const ValueKey('timetable-header-3'))),
+    ).colorScheme;
+    expect(_headerBackgroundColor(tester, 3), scheme.primaryContainer);
+    expect(_headerBackgroundColor(tester, 2), scheme.surfaceContainerHighest);
+  });
+
+  testWidgets(
+    'uses first or final week outside the semester without highlight',
+    (tester) async {
+      await _pumpSchedule(
+        tester,
+        semester.copyWith(weekCount: 20),
+        currentDate: DateTime(2026, 2, 1),
+      );
+
+      expect(find.text('02-23'), findsOneWidget);
+      final scheme = Theme.of(
+        tester.element(find.byKey(const ValueKey('timetable-header-1'))),
+      ).colorScheme;
+      expect(_headerBackgroundColor(tester, 1), scheme.surfaceContainerHighest);
+
+      await _pumpSchedule(
+        tester,
+        semester.copyWith(weekCount: 20),
+        currentDate: DateTime(2026, 7, 13),
+      );
+      expect(find.text('07-06'), findsOneWidget);
+      expect(_headerBackgroundColor(tester, 1), scheme.surfaceContainerHighest);
+    },
+  );
+
   testWidgets('shows semester controls and timetable headers', (tester) async {
     await _pumpSchedule(tester, semester);
 
@@ -442,6 +499,31 @@ void main() {
     );
   });
 
+  testWidgets('recognizes and validates the configurable semester week count', (
+    tester,
+  ) async {
+    await _pumpSchedule(tester, semester);
+    await _openScheduleEditor(tester);
+    await _enterValidImportForm(tester, '可扩展课表');
+
+    await tester.tap(find.byKey(const ValueKey('preview-import-button')));
+    await tester.pumpAndSettle();
+    final weekCountField = find.byKey(
+      const ValueKey('import-week-count-field'),
+    );
+    expect(tester.widget<TextField>(weekCountField).controller!.text, '17');
+
+    await tester.enterText(weekCountField, '16');
+    await tester.tap(find.byKey(const ValueKey('preview-import-button')));
+    await tester.pumpAndSettle();
+    expect(find.text('学期总周数不得小于第17周'), findsOneWidget);
+
+    await tester.enterText(weekCountField, '20');
+    await tester.tap(find.byKey(const ValueKey('preview-import-button')));
+    await tester.pumpAndSettle();
+    expect(find.text('第 20 周'), findsOneWidget);
+  });
+
   testWidgets('switches week inside import preview timetable', (tester) async {
     await _pumpSchedule(tester, semester);
     await _openScheduleEditor(tester);
@@ -528,6 +610,34 @@ void main() {
     expect(find.text('已修改课表'), findsOneWidget);
   });
 
+  testWidgets('allows reducing extended weeks down to the final course week', (
+    tester,
+  ) async {
+    final store = await _emptyStore();
+    final record = await store.addRecord(
+      semester: _loadSampleSemester(
+        displayName: '扩展课表',
+      ).copyWith(weekCount: 20),
+      existingDisplayNames: const ['2025-2026-2学期'],
+    );
+    await _pumpSchedule(tester, semester, store: store);
+    await _openManagementPage(tester);
+    await tester.tap(find.byKey(ValueKey('edit-schedule-${record.id}')));
+    await tester.pumpAndSettle();
+
+    final weekCountField = find.byKey(
+      const ValueKey('import-week-count-field'),
+    );
+    expect(tester.widget<TextField>(weekCountField).controller!.text, '20');
+    await tester.enterText(weekCountField, '17');
+    await tester.tap(find.byKey(const ValueKey('preview-import-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('confirm-import-button')));
+    await tester.pumpAndSettle();
+
+    expect((await store.loadRecords()).single.semester.weekCount, 17);
+  });
+
   testWidgets('deletes an imported schedule in the management page', (
     tester,
   ) async {
@@ -568,6 +678,7 @@ Future<void> _pumpSchedule(
   ImportedSemesterStore? store,
   CourseCustomizationStore? customizationStore,
   Size size = const Size(1280, 900),
+  DateTime? currentDate,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -578,9 +689,11 @@ Future<void> _pumpSchedule(
   final importedStore = store ?? await _emptyStore();
   await tester.pumpWidget(
     CourseScheduleApp(
+      key: ValueKey((currentDate ?? DateTime(2026, 2, 23)).toIso8601String()),
       semestersFuture: Future.value([semester]),
       importedSemesterStore: importedStore,
       courseCustomizationStore: customizationStore,
+      currentDate: currentDate ?? DateTime(2026, 2, 23),
     ),
   );
   await tester.pumpAndSettle();
@@ -630,4 +743,12 @@ Future<ImportedSemesterStore> _emptyStore() async {
   SharedPreferences.setMockInitialValues({});
   final preferences = await SharedPreferences.getInstance();
   return ImportedSemesterStore(preferences: preferences);
+}
+
+Color? _headerBackgroundColor(WidgetTester tester, int weekday) {
+  final header = find.byKey(ValueKey('timetable-header-$weekday'));
+  final decoration = tester.widget<DecoratedBox>(
+    find.descendant(of: header, matching: find.byType(DecoratedBox)).first,
+  );
+  return (decoration.decoration as BoxDecoration).color;
 }

@@ -27,8 +27,7 @@ class _QuickAddCourseDialogState extends State<QuickAddCourseDialog> {
   late int _weekday = widget.selection.weekday;
   String? _errorMessage;
 
-  int get _maxWeek =>
-      widget.semester.maxWeek < 20 ? 20 : widget.semester.maxWeek;
+  int get _maxWeek => widget.semester.maxWeek;
 
   @override
   void dispose() {

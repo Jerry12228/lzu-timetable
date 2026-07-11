@@ -22,6 +22,7 @@
 - Parse course HTML and period HTML into typed Dart models before rendering.
 - Do not hand-edit normalized course data when it can be derived from the source HTML.
 - Future imports should feed the same importer API used by bundled samples.
+- Persist configured semester week counts in normalized JSON; allow them to exceed, but never fall below, the final scheduled course week.
 - Keep raw full-page teaching-system samples under `assets/raw/` when they are used to verify import compatibility.
 - Parse imported HTML before persistence and store only typed, JSON-serializable semester data. HTML may exist only in the transient import flow or be read once to migrate an older local record.
 - Expand teaching-system week expressions during parsing. Store and render each fixed class as an individual numeric week session; do not persist or expose editable week-rule text.
