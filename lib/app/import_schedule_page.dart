@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:file_picker/file_picker.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../models/schedule_models.dart';
@@ -204,16 +204,15 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
       _errorMessage = null;
     });
     try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['html', 'htm', 'txt'],
-        withData: true,
+      const htmlFileTypes = XTypeGroup(
+        label: 'HTML 文件',
+        extensions: ['html', 'htm', 'txt'],
       );
-      final file = result?.files.single;
-      final bytes = file?.bytes;
-      if (file == null || bytes == null) {
+      final file = await openFile(acceptedTypeGroups: [htmlFileTypes]);
+      if (file == null) {
         return;
       }
+      final bytes = await file.readAsBytes();
       _htmlController.text = utf8.decode(bytes, allowMalformed: true);
     } catch (_) {
       setState(() {

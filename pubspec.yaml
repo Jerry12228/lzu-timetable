@@ -36,7 +36,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   html: ^0.15.6
   shared_preferences: ^2.5.5
-  file_picker: 10.3.3
+  file_selector: ^1.1.0
   webview_flutter: ^4.13.0
 
 dev_dependencies:
