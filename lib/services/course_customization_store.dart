@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/schedule_models.dart';
 import 'semester_importer.dart';
+import 'semester_json_codec.dart';
 
 class CourseCustomizationStore {
   CourseCustomizationStore({SharedPreferences? preferences})
@@ -12,13 +13,15 @@ class CourseCustomizationStore {
           : Future.value(preferences);
 
   static const _storageKey = 'course_schedule_course_customizations_v1';
+  static const _manualCoursesStorageKey = 'course_schedule_manual_courses_v1';
 
   final Future<SharedPreferences> _preferencesFuture;
 
   Future<Semester> applyToSemester(Semester semester) async {
     final customizations = await loadForSemester(semester.id);
+    final manualCourses = await loadManualCourses(semester.id);
     final courses = <Course>[];
-    for (final course in semester.courses) {
+    for (final course in [...semester.courses, ...manualCourses]) {
       final customization = customizations[CourseKey.fromCourse(course)];
       if (customization == null) {
         courses.add(course);
@@ -27,6 +30,30 @@ class CourseCustomizationStore {
       }
     }
     return semester.copyWith(courses: courses);
+  }
+
+  Future<List<Course>> loadManualCourses(String semesterId) async {
+    final all = await _readAllManualCourses();
+    return all[semesterId] ?? const [];
+  }
+
+  Future<void> saveManualCourse({
+    required String semesterId,
+    required Course course,
+  }) async {
+    final all = await _readAllManualCourses();
+    final courses = [...(all[semesterId] ?? const <Course>[])];
+    final key = CourseKey.fromCourse(course);
+    final existingIndex = courses.indexWhere(
+      (item) => CourseKey.fromCourse(item) == key,
+    );
+    if (existingIndex == -1) {
+      courses.add(course);
+    } else {
+      courses[existingIndex] = course;
+    }
+    all[semesterId] = courses;
+    await _writeAllManualCourses(all);
   }
 
   Future<Map<CourseKey, CourseCustomization>> loadForSemester(
@@ -99,6 +126,52 @@ class CourseCustomizationStore {
   Future<void> _writeAll(Map<String, Object?> value) async {
     final preferences = await _preferencesFuture;
     await preferences.setString(_storageKey, jsonEncode(value));
+  }
+
+  Future<Map<String, List<Course>>> _readAllManualCourses() async {
+    final preferences = await _preferencesFuture;
+    final raw = preferences.getString(_manualCoursesStorageKey);
+    if (raw == null || raw.isEmpty) {
+      return <String, List<Course>>{};
+    }
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) {
+        return <String, List<Course>>{};
+      }
+      final coursesBySemester = <String, List<Course>>{};
+      for (final entry in decoded.entries) {
+        if (entry.key is! String || entry.value is! List) {
+          continue;
+        }
+        coursesBySemester[entry.key as String] = [
+          for (final value in entry.value as List)
+            if (value is Map)
+              SemesterJsonCodec.courseFromJson(
+                Map<String, Object?>.from(value),
+              ),
+        ];
+      }
+      return coursesBySemester;
+    } on FormatException {
+      return <String, List<Course>>{};
+    }
+  }
+
+  Future<void> _writeAllManualCourses(
+    Map<String, List<Course>> coursesBySemester,
+  ) async {
+    final preferences = await _preferencesFuture;
+    await preferences.setString(
+      _manualCoursesStorageKey,
+      jsonEncode({
+        for (final entry in coursesBySemester.entries)
+          entry.key: [
+            for (final course in entry.value)
+              SemesterJsonCodec.courseToJson(course),
+          ],
+      }),
+    );
   }
 }
 

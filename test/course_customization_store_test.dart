@@ -93,4 +93,45 @@ void main() {
       );
     },
   );
+
+  test(
+    'persists manually added courses as JSON alongside imported courses',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final store = CourseCustomizationStore(preferences: preferences);
+      final sourceSession = semester.courses
+          .firstWhere((course) => course.hasFixedSchedule)
+          .sessions
+          .first;
+      final manualCourse = Course(
+        courseCode: '${manualCourseCodePrefix}test',
+        sequence: 'local',
+        name: '手动课程',
+        teachers: const [],
+        credits: '',
+        selectionType: '',
+        assessment: '',
+        examNature: '',
+        deferredExam: '',
+        material: '',
+        courseDetailLink: null,
+        teachingRecordLink: null,
+        processScoreLink: null,
+        sessions: [sourceSession],
+      );
+
+      await store.saveManualCourse(
+        semesterId: semester.id,
+        course: manualCourse,
+      );
+
+      final applied = await store.applyToSemester(semester);
+      expect(applied.courses.map((course) => course.name), contains('手动课程'));
+      expect(
+        preferences.getString('course_schedule_manual_courses_v1'),
+        allOf(isNot(contains('courseHtml')), isNot(contains('weekRule'))),
+      );
+    },
+  );
 }

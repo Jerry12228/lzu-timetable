@@ -1,5 +1,21 @@
 const weekdays = <String>['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'];
 
+const manualCourseCodePrefix = 'local-manual-';
+
+class TimetableCellSelection {
+  const TimetableCellSelection({
+    required this.week,
+    required this.weekday,
+    required this.section,
+    this.date,
+  });
+
+  final int week;
+  final int weekday;
+  final String section;
+  final DateTime? date;
+}
+
 class PeriodDefinition {
   const PeriodDefinition({
     required this.order,
@@ -101,6 +117,7 @@ class Course {
   final List<CourseSession> sessions;
 
   bool get hasFixedSchedule => sessions.isNotEmpty;
+  bool get isManual => courseCode.startsWith(manualCourseCodePrefix);
 
   Course copyWith({
     String? name,

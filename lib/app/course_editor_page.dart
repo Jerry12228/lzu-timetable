@@ -77,8 +77,12 @@ class _CourseEditorPageState extends State<CourseEditorPage> {
           padding: const EdgeInsets.all(18),
           children: [
             const _EditorHeading('课程信息'),
-            _ReadonlyRow(label: '课程号', value: widget.course.courseCode),
-            _ReadonlyRow(label: '课程序号', value: widget.course.sequence),
+            if (widget.course.isManual)
+              const _ReadonlyRow(label: '课程来源', value: '手动添加')
+            else ...[
+              _ReadonlyRow(label: '课程号', value: widget.course.courseCode),
+              _ReadonlyRow(label: '课程序号', value: widget.course.sequence),
+            ],
             const SizedBox(height: 10),
             TextField(
               key: const ValueKey('course-name-field'),

@@ -148,6 +148,64 @@ void main() {
     );
   });
 
+  testWidgets('adds a course from an empty timetable cell across weeks', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final customizationStore = CourseCustomizationStore(
+      preferences: preferences,
+    );
+    await _pumpSchedule(
+      tester,
+      semester,
+      store: ImportedSemesterStore(preferences: preferences),
+      customizationStore: customizationStore,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('empty-cell-7-第1节')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('添加课程'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilterChip>(find.byKey(const ValueKey('quick-add-week-1')))
+          .selected,
+      isTrue,
+    );
+    expect(
+      tester
+          .widget<DropdownButtonFormField<String>>(
+            find.byKey(const ValueKey('quick-add-period-dropdown')),
+          )
+          .initialValue,
+      '第1节',
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('quick-add-name-field')),
+      '手动新增课程',
+    );
+    await tester.tap(find.byKey(const ValueKey('quick-add-week-2')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('quick-add-save-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('手动新增课程'), findsOneWidget);
+    final applied = await customizationStore.applyToSemester(semester);
+    final course = applied.courses.firstWhere(
+      (course) => course.name == '手动新增课程',
+    );
+    expect(course.isManual, isTrue);
+    expect(course.sessions.map((session) => session.week), [1, 2]);
+
+    await tester.tap(find.text('第1周').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('第2周').last);
+    await tester.pumpAndSettle();
+    expect(find.text('手动新增课程'), findsOneWidget);
+  });
+
   testWidgets('selects one week session and removes selected sessions', (
     tester,
   ) async {

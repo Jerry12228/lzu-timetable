@@ -8,12 +8,16 @@ class TimetableGrid extends StatelessWidget {
     required this.compact,
     required this.scheduled,
     required this.onCourseTap,
+    this.selectedWeek,
+    this.onEmptyCellTap,
     this.weekDateRange,
   });
 
   final bool compact;
   final List<ScheduledCourse> scheduled;
   final void Function(Course course, CourseSession? session) onCourseTap;
+  final int? selectedWeek;
+  final ValueChanged<TimetableCellSelection>? onEmptyCellTap;
   final DateRange? weekDateRange;
 
   static const _headerHeight = 44.0;
@@ -50,9 +54,11 @@ class TimetableGrid extends StatelessWidget {
             headerHeight: headerHeight,
             rowHeight: _rowHeight,
             scheduled: scheduled,
+            selectedWeek: selectedWeek,
             weekDateRange: weekDateRange,
             dense: denseMobile,
             onCourseTap: onCourseTap,
+            onEmptyCellTap: onEmptyCellTap,
           ),
         );
 
@@ -83,9 +89,11 @@ class _TimetableCanvas extends StatelessWidget {
     required this.headerHeight,
     required this.rowHeight,
     required this.scheduled,
+    required this.selectedWeek,
     required this.weekDateRange,
     required this.dense,
     required this.onCourseTap,
+    required this.onEmptyCellTap,
   });
 
   final double leftWidth;
@@ -93,9 +101,11 @@ class _TimetableCanvas extends StatelessWidget {
   final double headerHeight;
   final double rowHeight;
   final List<ScheduledCourse> scheduled;
+  final int? selectedWeek;
   final DateRange? weekDateRange;
   final bool dense;
   final void Function(Course course, CourseSession? session) onCourseTap;
+  final ValueChanged<TimetableCellSelection>? onEmptyCellTap;
 
   @override
   Widget build(BuildContext context) {
@@ -143,6 +153,35 @@ class _TimetableCanvas extends StatelessWidget {
               rowHeight: rowHeight,
               suppressedLineSegments: suppressedLineSegments,
             ),
+            if (onEmptyCellTap != null && selectedWeek != null)
+              for (var day = 0; day < weekdays.length; day++)
+                for (
+                  var section = 0;
+                  section < _timetableSections.length;
+                  section++
+                )
+                  if (!_isCellOccupied(
+                    scheduled: scheduled,
+                    weekday: day + 1,
+                    section: _timetableSections[section].id,
+                  ))
+                    _PositionedEmptyCell(
+                      key: ValueKey(
+                        'empty-cell-${day + 1}-${_timetableSections[section].id}',
+                      ),
+                      left: leftWidth + day * dayWidth,
+                      top: headerHeight + section * rowHeight,
+                      width: dayWidth,
+                      height: rowHeight,
+                      onTap: () => onEmptyCellTap!(
+                        TimetableCellSelection(
+                          week: selectedWeek!,
+                          weekday: day + 1,
+                          section: _timetableSections[section].id,
+                          date: weekDateRange?.start.add(Duration(days: day)),
+                        ),
+                      ),
+                    ),
             for (final item in scheduled)
               if (_sectionSpanFor(item.session) case final span?)
                 _PositionedCourseBlock(
@@ -159,6 +198,37 @@ class _TimetableCanvas extends StatelessWidget {
                 ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _PositionedEmptyCell extends StatelessWidget {
+  const _PositionedEmptyCell({
+    super.key,
+    required this.left,
+    required this.top,
+    required this.width,
+    required this.height,
+    required this.onTap,
+  });
+
+  final double left;
+  final double top;
+  final double width;
+  final double height;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: left,
+      top: top,
+      width: width,
+      height: height,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(onTap: onTap),
       ),
     );
   }
@@ -465,6 +535,7 @@ class _PositionedCourseBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = _courseColor(scheduled.course.name);
     final session = scheduled.session;
+    final shortBlock = !dense && height < 86;
     return Positioned(
       left: left,
       top: top,
@@ -487,7 +558,7 @@ class _PositionedCourseBlock extends StatelessWidget {
               children: [
                 Text(
                   scheduled.course.name,
-                  maxLines: 2,
+                  maxLines: dense || !shortBlock ? 2 : 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: color,
@@ -509,7 +580,16 @@ class _PositionedCourseBlock extends StatelessWidget {
                     ),
                   ),
                 ],
-                if (!dense) ...[
+                if (!dense && shortBlock) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    session.location.isEmpty ? '地点未公布' : session.location,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, color: Colors.black87),
+                  ),
+                ],
+                if (!dense && !shortBlock) ...[
                   const SizedBox(height: 4),
                   Text(
                     session.location.isEmpty ? '地点未公布' : session.location,
@@ -595,6 +675,18 @@ _SectionSpan? _sectionSpanFor(CourseSession session) {
   return _SectionSpan(
     startIndex: indexes.first,
     length: indexes.last - indexes.first + 1,
+  );
+}
+
+bool _isCellOccupied({
+  required List<ScheduledCourse> scheduled,
+  required int weekday,
+  required String section,
+}) {
+  return scheduled.any(
+    (item) =>
+        item.session.weekday == weekday &&
+        item.session.sections.contains(section),
   );
 }
 

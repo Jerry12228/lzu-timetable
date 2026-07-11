@@ -25,7 +25,7 @@
 - Keep raw full-page teaching-system samples under `assets/raw/` when they are used to verify import compatibility.
 - Parse imported HTML before persistence and store only typed, JSON-serializable semester data. HTML may exist only in the transient import flow or be read once to migrate an older local record.
 - Expand teaching-system week expressions during parsing. Store and render each fixed class as an individual numeric week session; do not persist or expose editable week-rule text.
-- Preserve source course HTML when users edit a course. Persist local course overrides separately and apply them only when the immutable `课程号 + 课程序号` key still matches an imported course.
+- Persist local course overrides separately and apply them only when the immutable `课程号 + 课程序号` key still matches an imported course. Persist manually added courses as separate JSON records with stable local course keys.
 
 ## Implementation Guidelines
 

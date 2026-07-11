@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'course_editor_page.dart';
 import 'course_schedule_management_page.dart';
+import 'quick_add_course_dialog.dart';
 import 'timetable_grid.dart';
 import '../models/schedule_models.dart';
 import '../services/course_customization_store.dart';
@@ -99,6 +100,7 @@ class _SemesterBootstrapState extends State<_SemesterBootstrap> {
           selectedSemesterId: _selectedSemesterId,
           onManageRequested: _openManagementPage,
           onCourseCustomizationSaved: _saveCourseCustomization,
+          onManualCourseSaved: _saveManualCourse,
         );
       },
     );
@@ -140,6 +142,19 @@ class _SemesterBootstrapState extends State<_SemesterBootstrap> {
       _semestersFuture = _loadSemesters();
     });
   }
+
+  Future<void> _saveManualCourse(String semesterId, Course course) async {
+    await _courseCustomizationStore.saveManualCourse(
+      semesterId: semesterId,
+      course: course,
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _semestersFuture = _loadSemesters();
+    });
+  }
 }
 
 class ScheduleHome extends StatefulWidget {
@@ -149,6 +164,7 @@ class ScheduleHome extends StatefulWidget {
     this.selectedSemesterId,
     this.onManageRequested,
     this.onCourseCustomizationSaved,
+    this.onManualCourseSaved,
   });
 
   final List<Semester> semesters;
@@ -159,6 +175,8 @@ class ScheduleHome extends StatefulWidget {
     CourseCustomization customization,
   )?
   onCourseCustomizationSaved;
+  final Future<void> Function(String semesterId, Course course)?
+  onManualCourseSaved;
 
   @override
   State<ScheduleHome> createState() => _ScheduleHomeState();
@@ -248,10 +266,14 @@ class _ScheduleHomeState extends State<ScheduleHome> {
                   child: TimetableGrid(
                     compact: compact,
                     scheduled: scheduled,
+                    selectedWeek: _selectedWeek,
                     weekDateRange: _selectedSemester.dateRangeForWeek(
                       _selectedWeek,
                     ),
                     onCourseTap: _showCourseDetails,
+                    onEmptyCellTap: widget.onManualCourseSaved == null
+                        ? null
+                        : _addCourseAt,
                   ),
                 ),
               ],
@@ -299,6 +321,42 @@ class _ScheduleHomeState extends State<ScheduleHome> {
       _selectedSemester.id,
       customization,
     );
+  }
+
+  Future<void> _addCourseAt(TimetableCellSelection selection) async {
+    if (widget.onManualCourseSaved == null) {
+      return;
+    }
+    final course = await showDialog<Course>(
+      context: context,
+      builder: (context) => QuickAddCourseDialog(
+        semester: _selectedSemester,
+        selection: selection,
+        validateCourse: _manualCourseConflict,
+      ),
+    );
+    if (course == null || !mounted) {
+      return;
+    }
+    await widget.onManualCourseSaved!(_selectedSemester.id, course);
+  }
+
+  String? _manualCourseConflict(Course course) {
+    for (final addedSession in course.sessions) {
+      for (final existingCourse in _selectedSemester.courses) {
+        for (final existingSession in existingCourse.sessions) {
+          final sameTime =
+              addedSession.week == existingSession.week &&
+              addedSession.weekday == existingSession.weekday &&
+              addedSession.sections.any(existingSession.sections.contains);
+          if (sameTime) {
+            return '第${addedSession.week}周 ${addedSession.weekdayText} '
+                '${addedSession.periodName} 与“${existingCourse.name}”冲突';
+          }
+        }
+      }
+    }
+    return null;
   }
 
   Semester? _semesterForId(String? id) {
@@ -651,8 +709,12 @@ class _CourseDetailDialog extends StatelessWidget {
                 _ActiveSessionBanner(session: session!),
                 const SizedBox(height: 14),
               ],
-              _DetailRow(label: '课程号', value: course.courseCode),
-              _DetailRow(label: '课程序号', value: course.sequence),
+              if (course.isManual)
+                const _DetailRow(label: '课程来源', value: '手动添加')
+              else ...[
+                _DetailRow(label: '课程号', value: course.courseCode),
+                _DetailRow(label: '课程序号', value: course.sequence),
+              ],
               _DetailRow(label: '任课教师', value: course.teachers.join('、')),
               _DetailRow(label: '学分', value: course.credits),
               _DetailRow(label: '选课属性', value: course.selectionType),

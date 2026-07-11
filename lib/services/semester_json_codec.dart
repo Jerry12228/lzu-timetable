@@ -9,7 +9,7 @@ class SemesterJsonCodec {
       'id': semester.id,
       'displayName': semester.displayName,
       'termStartDate': _dateToJson(semester.termStartDate),
-      'courses': [for (final course in semester.courses) _courseToJson(course)],
+      'courses': [for (final course in semester.courses) courseToJson(course)],
       'periods': [for (final period in semester.periods) _periodToJson(period)],
     };
   }
@@ -21,7 +21,7 @@ class SemesterJsonCodec {
       termStartDate: _dateFromJson(json['termStartDate']),
       courses: [
         for (final course in _objectList(json['courses'], 'courses'))
-          _courseFromJson(course),
+          courseFromJson(course),
       ],
       periods: [
         for (final period in _objectList(json['periods'], 'periods'))
@@ -29,6 +29,12 @@ class SemesterJsonCodec {
       ],
     );
   }
+
+  static Map<String, Object?> courseToJson(Course course) =>
+      _courseToJson(course);
+
+  static Course courseFromJson(Map<String, Object?> json) =>
+      _courseFromJson(json);
 }
 
 Map<String, Object?> _courseToJson(Course course) {
