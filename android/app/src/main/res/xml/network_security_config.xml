@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
+    <!-- The SSO service returns to the academic system through HTTP. -->
+    <base-config cleartextTrafficPermitted="true" />
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="true">jwk.lzu.edu.cn</domain>
+        <domain includeSubdomains="true">sso.lzu.edu.cn</domain>
     </domain-config>
 </network-security-config>

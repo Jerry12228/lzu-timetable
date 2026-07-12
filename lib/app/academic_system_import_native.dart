@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 import '../services/academic_course_page_recognizer.dart';
 
@@ -46,6 +47,7 @@ class _AcademicSystemImportPageState extends State<_AcademicSystemImportPage> {
   bool _keepLogin = true;
   bool _canPop = false;
   bool _isLeaving = false;
+  String? _loadError;
 
   bool get _isCoursePage =>
       AcademicCoursePageRecognizer.isCoursePageUrl(_currentUrl);
@@ -53,7 +55,9 @@ class _AcademicSystemImportPageState extends State<_AcademicSystemImportPage> {
   @override
   void initState() {
     super.initState();
-    _controller = WebViewController();
+    _controller = WebViewController.fromPlatformCreationParams(
+      AndroidWebViewControllerCreationParams(),
+    );
     unawaited(_configureWebView());
   }
 
@@ -76,6 +80,13 @@ class _AcademicSystemImportPageState extends State<_AcademicSystemImportPage> {
           title: const Text('教务系统导入'),
           backgroundColor: Colors.white,
           surfaceTintColor: Colors.transparent,
+          actions: [
+            IconButton(
+              tooltip: '重新加载',
+              onPressed: () => unawaited(_reloadCoursePage()),
+              icon: const Icon(Icons.refresh),
+            ),
+          ],
         ),
         body: Column(
           children: [
@@ -96,6 +107,16 @@ class _AcademicSystemImportPageState extends State<_AcademicSystemImportPage> {
               ),
             ),
             if (_isLoading) const LinearProgressIndicator(minHeight: 2),
+            if (_loadError != null)
+              MaterialBanner(
+                content: Text(_loadError!),
+                actions: [
+                  TextButton(
+                    onPressed: () => unawaited(_reloadCoursePage()),
+                    child: const Text('重试'),
+                  ),
+                ],
+              ),
             Expanded(child: WebViewWidget(controller: _controller)),
           ],
         ),
@@ -117,6 +138,10 @@ class _AcademicSystemImportPageState extends State<_AcademicSystemImportPage> {
   }
 
   Future<void> _configureWebView() async {
+    final androidController = _controller.platform;
+    if (androidController is AndroidWebViewController) {
+      await androidController.setMixedContentMode(MixedContentMode.alwaysAllow);
+    }
     await _controller.setJavaScriptMode(JavaScriptMode.unrestricted);
     await _controller.setNavigationDelegate(
       NavigationDelegate(
@@ -127,6 +152,7 @@ class _AcademicSystemImportPageState extends State<_AcademicSystemImportPage> {
           setState(() {
             _currentUrl = url;
             _isLoading = true;
+            _loadError = null;
           });
         },
         onPageFinished: (url) {
@@ -136,17 +162,31 @@ class _AcademicSystemImportPageState extends State<_AcademicSystemImportPage> {
           setState(() {
             _currentUrl = url;
             _isLoading = false;
+            _loadError = null;
           });
         },
-        onWebResourceError: (_) {
-          if (mounted) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(const SnackBar(content: Text('页面加载失败，请检查网络后重试')));
+        onWebResourceError: (error) {
+          if (error.isForMainFrame != true || !mounted) {
+            return;
           }
+          setState(() {
+            _isLoading = false;
+            _loadError = '页面加载失败（${error.errorCode}）：${error.description}';
+          });
         },
       ),
     );
+    await _reloadCoursePage();
+  }
+
+  Future<void> _reloadCoursePage() async {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
     await _controller.loadRequest(Uri.parse(_coursePageUrl));
   }
 
