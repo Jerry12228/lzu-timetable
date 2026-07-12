@@ -384,31 +384,43 @@ class _SectionCell extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            if (time != null)
+              _SectionTimeText(value: time!.startTime, dense: dense),
             Text(
               label,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: dense ? 9 : 13,
+                fontSize: dense ? 8.5 : 13,
+                height: 1.1,
                 fontWeight: FontWeight.w700,
               ),
             ),
-            if (time != null) ...[
-              SizedBox(height: dense ? 1 : 3),
-              Text(
-                '${time!.startTime}-${time!.endTime}',
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.clip,
-                style: TextStyle(
-                  fontSize: dense ? 5.5 : 9,
-                  height: 1,
-                  color: Colors.black54,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
+            if (time != null)
+              _SectionTimeText(value: time!.endTime, dense: dense),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _SectionTimeText extends StatelessWidget {
+  const _SectionTimeText({required this.value, required this.dense});
+
+  final String value;
+  final bool dense;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      value,
+      textAlign: TextAlign.center,
+      maxLines: 1,
+      style: TextStyle(
+        fontSize: dense ? 7.5 : 10,
+        height: 1.1,
+        color: Colors.black54,
+        fontWeight: FontWeight.w600,
       ),
     );
   }

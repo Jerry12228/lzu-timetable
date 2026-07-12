@@ -90,7 +90,8 @@ void main() {
     expect(find.text('02-23'), findsOneWidget);
     expect(find.text('03-01'), findsOneWidget);
     expect(find.text('第1节'), findsOneWidget);
-    expect(find.text('08:30-09:15'), findsOneWidget);
+    expect(find.text('08:30'), findsOneWidget);
+    expect(find.text('09:15'), findsOneWidget);
     expect(find.text('中午1'), findsOneWidget);
     expect(find.text('第12节'), findsOneWidget);
     expect(find.text('中国近现代史纲要'), findsOneWidget);
@@ -116,7 +117,8 @@ void main() {
     expect(find.text('星期日'), findsOneWidget);
     expect(find.text('02-23'), findsOneWidget);
     expect(find.text('第1节'), findsOneWidget);
-    expect(find.text('08:30-09:15'), findsOneWidget);
+    expect(find.text('08:30'), findsOneWidget);
+    expect(find.text('09:15'), findsOneWidget);
     expect(find.text('天山堂A208'), findsOneWidget);
 
     final tableSize = tester.getSize(
