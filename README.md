@@ -25,6 +25,21 @@ TODO：更详细的使用指引
 - 构建 Android release APK：`flutter build apk --release`
 - 运行 Android 设备或模拟器：`flutter run -d <device-id>`
 
+## Android release 签名
+
+复制示例文件并填写本机 keystore 信息：
+
+```powershell
+Copy-Item android\key.properties.example android\key.properties
+```
+
+`android/key.properties` 和 keystore 文件不会提交到仓库。填写完成后运行：
+
+```powershell
+flutter build apk --release
+flutter build appbundle --release
+```
+
 ## 项目标识
 
 - 仓库名建议：`lzu-timetable`
