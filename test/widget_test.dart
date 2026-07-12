@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:course_schedule/app/course_schedule_app.dart';
+import 'package:course_schedule/app/import_schedule_page.dart';
 import 'package:course_schedule/models/schedule_models.dart';
 import 'package:course_schedule/services/course_customization_store.dart';
 import 'package:course_schedule/services/imported_semester_store.dart';
@@ -495,8 +496,48 @@ void main() {
             find.byKey(const ValueKey('confirm-import-button')),
           )
           .onPressed,
-      isNull,
+      isNotNull,
     );
+  });
+
+  testWidgets('confirms a valid imported schedule without previewing first', (
+    tester,
+  ) async {
+    final store = await _emptyStore();
+    await _pumpSchedule(tester, semester, store: store);
+    await _openScheduleEditor(tester);
+    await _enterValidImportForm(tester, '直接添加课表');
+
+    await tester.tap(find.byKey(const ValueKey('confirm-import-button')));
+    await tester.pumpAndSettle();
+
+    expect((await store.loadRecords()).single.displayName, '直接添加课表');
+  });
+
+  testWidgets('auto previews academic recognition without showing html', (
+    tester,
+  ) async {
+    final store = await _emptyStore();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ImportSchedulePage(
+          existingDisplayNames: const [],
+          store: store,
+          initialDisplayName: '识别课表',
+          initialCourseHtml: File(
+            'assets/raw/2025-2026-2-courses.html',
+          ).readAsStringSync(),
+          hideCourseHtml: true,
+          autoPreview: true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('import-html-field')), findsNothing);
+    expect(find.text('预览结果'), findsOneWidget);
+    expect(find.text('中国近现代史纲要'), findsOneWidget);
+    expect(find.byKey(const ValueKey('import-date-field')), findsOneWidget);
   });
 
   testWidgets('recognizes and validates the configurable semester week count', (

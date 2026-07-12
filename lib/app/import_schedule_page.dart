@@ -18,6 +18,8 @@ class ImportSchedulePage extends StatefulWidget {
     this.initialTermStartDate,
     this.initialSemester,
     this.initialCourseHtml,
+    this.hideCourseHtml = false,
+    this.autoPreview = false,
   });
 
   final List<String> existingDisplayNames;
@@ -27,6 +29,8 @@ class ImportSchedulePage extends StatefulWidget {
   final DateTime? initialTermStartDate;
   final Semester? initialSemester;
   final String? initialCourseHtml;
+  final bool hideCourseHtml;
+  final bool autoPreview;
 
   bool get isEditing => editingSemesterId != null;
 
@@ -63,6 +67,13 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
     _dateController.addListener(_invalidatePreview);
     _weekCountController.addListener(_invalidatePreview);
     _htmlController.addListener(_invalidatePreview);
+    if (widget.autoPreview && _htmlController.text.trim().isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _previewHtml(allowMissingStartDate: true, allowExistingName: true);
+        }
+      });
+    }
   }
 
   @override
@@ -127,30 +138,32 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  TextField(
-                    key: const ValueKey('import-html-field'),
-                    controller: _htmlController,
-                    minLines: 10,
-                    maxLines: 18,
-                    decoration: InputDecoration(
-                      labelText: widget.isEditing
-                          ? '课程列表 HTML（可选，重新解析课程）'
-                          : '课程列表 HTML',
-                      hintText: widget.isEditing ? '留空会保留当前已解析的课程数据' : null,
-                      alignLabelWithHint: true,
-                      border: const OutlineInputBorder(),
+                  if (!widget.hideCourseHtml)
+                    TextField(
+                      key: const ValueKey('import-html-field'),
+                      controller: _htmlController,
+                      minLines: 10,
+                      maxLines: 18,
+                      decoration: InputDecoration(
+                        labelText: widget.isEditing
+                            ? '课程列表 HTML（可选，重新解析课程）'
+                            : '课程列表 HTML',
+                        hintText: widget.isEditing ? '留空会保留当前已解析的课程数据' : null,
+                        alignLabelWithHint: true,
+                        border: const OutlineInputBorder(),
+                      ),
                     ),
-                  ),
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 10,
                     runSpacing: 10,
                     children: [
-                      OutlinedButton.icon(
-                        onPressed: _isPickingFile ? null : _pickHtmlFile,
-                        icon: const Icon(Icons.upload_file),
-                        label: Text(_isPickingFile ? '读取中...' : '上传 HTML'),
-                      ),
+                      if (!widget.hideCourseHtml)
+                        OutlinedButton.icon(
+                          onPressed: _isPickingFile ? null : _pickHtmlFile,
+                          icon: const Icon(Icons.upload_file),
+                          label: Text(_isPickingFile ? '读取中...' : '上传 HTML'),
+                        ),
                       FilledButton.icon(
                         key: const ValueKey('preview-import-button'),
                         onPressed: _previewHtml,
@@ -159,9 +172,11 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
                       ),
                       FilledButton.icon(
                         key: const ValueKey('confirm-import-button'),
-                        onPressed: hasValidPreview && !_isSaving
-                            ? () => _confirmSchedule(preview)
-                            : null,
+                        onPressed: _isSaving
+                            ? null
+                            : () => _confirmSchedule(
+                                hasValidPreview ? preview : null,
+                              ),
                         icon: Icon(widget.isEditing ? Icons.save : Icons.add),
                         label: Text(
                           _isSaving
@@ -243,9 +258,15 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
     }
   }
 
-  void _previewHtml() {
+  void _previewHtml({
+    bool allowMissingStartDate = false,
+    bool allowExistingName = false,
+  }) {
     try {
-      final semester = _parseInputForPreview();
+      final semester = _parseInputForPreview(
+        allowMissingStartDate: allowMissingStartDate,
+        allowExistingName: allowExistingName,
+      );
       setState(() {
         _preview = semester;
         _previewKey = _currentInputKey;
@@ -260,15 +281,18 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
     }
   }
 
-  Future<void> _confirmSchedule(Semester preview) async {
+  Future<void> _confirmSchedule(Semester? preview) async {
     setState(() {
       _isSaving = true;
       _errorMessage = null;
     });
     try {
+      final hasValidPreview =
+          preview != null && _previewKey == _currentInputKey;
+      final semester = hasValidPreview ? preview : _parseInputForPreview();
       final record = await widget.store.saveRecord(
         semesterId: widget.editingSemesterId,
-        semester: preview,
+        semester: semester,
         existingDisplayNames: widget.existingDisplayNames,
       );
       if (mounted) {
@@ -285,9 +309,16 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
     }
   }
 
-  Semester _parseInputForPreview() {
-    final displayName = _validatedDisplayName();
-    final termStartDate = _validatedStartDate();
+  Semester _parseInputForPreview({
+    bool allowMissingStartDate = false,
+    bool allowExistingName = false,
+  }) {
+    final displayName = _validatedDisplayName(
+      allowExistingName: allowExistingName,
+    );
+    final termStartDate = _validatedStartDate(
+      allowMissing: allowMissingStartDate,
+    );
     final courseHtml = _htmlController.text.trim();
     final Semester semester;
     if (courseHtml.isEmpty) {
@@ -327,7 +358,7 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
     return value;
   }
 
-  String _validatedDisplayName() {
+  String _validatedDisplayName({bool allowExistingName = false}) {
     final displayName = _nameController.text.trim();
     if (displayName.isEmpty) {
       throw const FormatException('请输入课表名称');
@@ -335,15 +366,18 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
     final names = widget.existingDisplayNames
         .map((name) => name.trim())
         .toSet();
-    if (names.contains(displayName)) {
+    if (!allowExistingName && names.contains(displayName)) {
       throw DuplicateSemesterNameException(displayName);
     }
     return displayName;
   }
 
-  DateTime _validatedStartDate() {
+  DateTime? _validatedStartDate({bool allowMissing = false}) {
     final date = _parseDateOrNull(_dateController.text);
     if (date == null) {
+      if (allowMissing) {
+        return null;
+      }
       throw const FormatException('请输入有效的第一周星期一日期，例如 2026-02-23');
     }
     if (date.weekday != DateTime.monday) {

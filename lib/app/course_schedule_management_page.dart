@@ -204,6 +204,8 @@ class _CourseScheduleManagementPageState
           initialTermStartDate: semester?.termStartDate,
           initialSemester: recognized == null ? semester : null,
           initialCourseHtml: recognized?.courseHtml,
+          hideCourseHtml: recognized != null,
+          autoPreview: recognized != null,
         ),
       ),
     );
