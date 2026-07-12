@@ -505,6 +505,7 @@ class _PreviewCardState extends State<_PreviewCard> {
           TimetableGrid(
             compact: compact,
             scheduled: scheduled,
+            periods: semester.periods,
             weekDateRange: semester.dateRangeForWeek(_selectedWeek),
             onCourseTap: (course, session) =>
                 _showPreviewCourseDetails(context, course, session),

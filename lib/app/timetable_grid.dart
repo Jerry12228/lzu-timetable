@@ -7,6 +7,7 @@ class TimetableGrid extends StatelessWidget {
     super.key,
     required this.compact,
     required this.scheduled,
+    required this.periods,
     required this.onCourseTap,
     this.selectedWeek,
     this.onEmptyCellTap,
@@ -16,6 +17,7 @@ class TimetableGrid extends StatelessWidget {
 
   final bool compact;
   final List<ScheduledCourse> scheduled;
+  final List<PeriodDefinition> periods;
   final void Function(Course course, CourseSession? session) onCourseTap;
   final int? selectedWeek;
   final ValueChanged<TimetableCellSelection>? onEmptyCellTap;
@@ -45,6 +47,7 @@ class TimetableGrid extends StatelessWidget {
             : _datedHeaderHeight;
         final tableHeight =
             headerHeight + _rowHeight * _timetableSections.length;
+        final sectionTimes = _singleSectionTimes(periods);
 
         final table = SizedBox(
           key: const ValueKey('timetable-canvas'),
@@ -56,6 +59,7 @@ class TimetableGrid extends StatelessWidget {
             headerHeight: headerHeight,
             rowHeight: _rowHeight,
             scheduled: scheduled,
+            sectionTimes: sectionTimes,
             selectedWeek: selectedWeek,
             weekDateRange: weekDateRange,
             today: today,
@@ -92,6 +96,7 @@ class _TimetableCanvas extends StatelessWidget {
     required this.headerHeight,
     required this.rowHeight,
     required this.scheduled,
+    required this.sectionTimes,
     required this.selectedWeek,
     required this.weekDateRange,
     required this.today,
@@ -105,6 +110,7 @@ class _TimetableCanvas extends StatelessWidget {
   final double headerHeight;
   final double rowHeight;
   final List<ScheduledCourse> scheduled;
+  final Map<String, _SectionTime> sectionTimes;
   final int? selectedWeek;
   final DateRange? weekDateRange;
   final DateTime? today;
@@ -155,6 +161,7 @@ class _TimetableCanvas extends StatelessWidget {
                 width: leftWidth,
                 height: rowHeight,
                 label: _timetableSections[index].label,
+                time: sectionTimes[_timetableSections[index].id],
                 dense: dense,
               ),
             _GridLinesLayer(
@@ -353,6 +360,7 @@ class _SectionCell extends StatelessWidget {
     required this.width,
     required this.height,
     required this.label,
+    required this.time,
     required this.dense,
   });
 
@@ -360,6 +368,7 @@ class _SectionCell extends StatelessWidget {
   final double width;
   final double height;
   final String label;
+  final _SectionTime? time;
   final bool dense;
 
   @override
@@ -372,13 +381,33 @@ class _SectionCell extends StatelessWidget {
       child: _TableCellShell(
         background: const Color(0xFFFAFBFC),
         dense: dense,
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: dense ? 9 : 13,
-            fontWeight: FontWeight.w700,
-          ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: dense ? 9 : 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            if (time != null) ...[
+              SizedBox(height: dense ? 1 : 3),
+              Text(
+                '${time!.startTime}-${time!.endTime}',
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.clip,
+                style: TextStyle(
+                  fontSize: dense ? 5.5 : 9,
+                  height: 1,
+                  color: Colors.black54,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -649,6 +678,13 @@ class _TimetableSection {
   final String label;
 }
 
+class _SectionTime {
+  const _SectionTime({required this.startTime, required this.endTime});
+
+  final String startTime;
+  final String endTime;
+}
+
 class _SectionSpan {
   const _SectionSpan({required this.startIndex, required this.length});
 
@@ -681,6 +717,20 @@ const _timetableSections = [
   _TimetableSection(id: '第11节', label: '第11节'),
   _TimetableSection(id: '第12节', label: '第12节'),
 ];
+
+Map<String, _SectionTime> _singleSectionTimes(List<PeriodDefinition> periods) {
+  final result = <String, _SectionTime>{};
+  for (final period in periods) {
+    if (period.sections.length != 1) {
+      continue;
+    }
+    result.putIfAbsent(
+      period.sections.single,
+      () => _SectionTime(startTime: period.startTime, endTime: period.endTime),
+    );
+  }
+  return result;
+}
 
 _SectionSpan? _sectionSpanFor(CourseSession session) {
   final indexes =

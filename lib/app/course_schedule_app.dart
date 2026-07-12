@@ -279,6 +279,7 @@ class _ScheduleHomeState extends State<ScheduleHome> {
                   child: TimetableGrid(
                     compact: compact,
                     scheduled: scheduled,
+                    periods: _selectedSemester.periods,
                     selectedWeek: _selectedWeek,
                     weekDateRange: _selectedSemester.dateRangeForWeek(
                       _selectedWeek,
