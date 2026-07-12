@@ -2,7 +2,7 @@
 
 ## Purpose and Scope
 
-This file governs the entire repository. It is written for future coding agents working on the Flutter course schedule app.
+This file governs the entire repository. It is written for future coding agents working on LZU Timetable, a Flutter course schedule app.
 
 - Active targets are Flutter Web and Android. Keep the Dart app and data model portable enough for a later iOS target unless a requirement explicitly says otherwise.
 - The product UI is Chinese. Keep labels such as `课程表`, `管理课程表`, `教务系统导入`, `课程序号`, and `第一周星期一` in Chinese when they identify real app concepts.

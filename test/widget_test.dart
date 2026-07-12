@@ -1,11 +1,11 @@
 import 'dart:io';
 
-import 'package:course_schedule/app/course_schedule_app.dart';
-import 'package:course_schedule/app/import_schedule_page.dart';
-import 'package:course_schedule/models/schedule_models.dart';
-import 'package:course_schedule/services/course_customization_store.dart';
-import 'package:course_schedule/services/imported_semester_store.dart';
-import 'package:course_schedule/services/semester_importer.dart';
+import 'package:lzu_timetable/app/course_schedule_app.dart';
+import 'package:lzu_timetable/app/import_schedule_page.dart';
+import 'package:lzu_timetable/models/schedule_models.dart';
+import 'package:lzu_timetable/services/course_customization_store.dart';
+import 'package:lzu_timetable/services/imported_semester_store.dart';
+import 'package:lzu_timetable/services/semester_importer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';

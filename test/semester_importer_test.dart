@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:course_schedule/services/default_periods.dart';
-import 'package:course_schedule/services/semester_importer.dart';
+import 'package:lzu_timetable/services/default_periods.dart';
+import 'package:lzu_timetable/services/semester_importer.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

@@ -1,4 +1,4 @@
-package com.jerry.course_schedule
+package com.jerry.lzutimetable
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -1,11 +1,11 @@
 {
-    "name": "课程表",
-    "short_name": "课程表",
+    "name": "兰大课表",
+    "short_name": "兰大课表",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#FFFFFF",
     "theme_color": "#0F766E",
-    "description": "课程表",
+    "description": "LZU Timetable",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

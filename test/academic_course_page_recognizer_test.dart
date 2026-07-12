@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:course_schedule/services/academic_course_page_recognizer.dart';
+import 'package:lzu_timetable/services/academic_course_page_recognizer.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
