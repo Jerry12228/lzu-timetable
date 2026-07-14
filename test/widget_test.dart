@@ -6,6 +6,7 @@ import 'package:lzu_timetable/models/schedule_models.dart';
 import 'package:lzu_timetable/services/course_customization_store.dart';
 import 'package:lzu_timetable/services/imported_semester_store.dart';
 import 'package:lzu_timetable/services/semester_importer.dart';
+import 'package:lzu_timetable/services/theme_preference_store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -20,6 +21,103 @@ void main() {
 
     expect(find.text('还没有课程表'), findsOneWidget);
     expect(find.text('2025-2026-2学期'), findsNothing);
+  });
+
+  testWidgets('defaults to system theme and persists desktop theme changes', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    await _pumpSchedule(
+      tester,
+      semester,
+      store: ImportedSemesterStore(preferences: preferences),
+      themePreferenceStore: ThemePreferenceStore(preferences: preferences),
+    );
+
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+      ThemeMode.system,
+    );
+    expect(
+      find.byKey(const ValueKey('desktop-theme-mode-button')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('desktop-theme-mode-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('theme-mode-dark')));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+      ThemeMode.dark,
+    );
+    expect(preferences.getString(ThemePreferenceStore.storageKey), 'dark');
+
+    await tester.tap(find.byKey(const ValueKey('desktop-theme-mode-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('theme-mode-light')));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+      ThemeMode.light,
+    );
+    expect(preferences.getString(ThemePreferenceStore.storageKey), 'light');
+
+    await tester.tap(find.byKey(const ValueKey('desktop-theme-mode-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('theme-mode-system')));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+      ThemeMode.system,
+    );
+    expect(preferences.getString(ThemePreferenceStore.storageKey), 'system');
+  });
+
+  testWidgets('mobile and empty schedule screens expose theme controls', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    await _pumpSchedule(
+      tester,
+      semester,
+      size: const Size(390, 844),
+      store: ImportedSemesterStore(preferences: preferences),
+      themePreferenceStore: ThemePreferenceStore(preferences: preferences),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('mobile-schedule-menu-button')));
+    await tester.pumpAndSettle();
+    expect(find.text('主题'), findsOneWidget);
+    await tester.tap(find.text('主题'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('theme-mode-dark')));
+    await tester.pumpAndSettle();
+    expect(preferences.getString(ThemePreferenceStore.storageKey), 'dark');
+
+    SharedPreferences.setMockInitialValues({});
+    final emptyPreferences = await SharedPreferences.getInstance();
+    await tester.pumpWidget(
+      CourseScheduleApp(
+        importedSemesterStore: ImportedSemesterStore(
+          preferences: emptyPreferences,
+        ),
+        themePreferenceStore: ThemePreferenceStore(
+          preferences: emptyPreferences,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('empty-schedule-menu-button')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('selects the current semester and highlights only today header', (
@@ -97,6 +195,35 @@ void main() {
     expect(find.text('中国近现代史纲要'), findsOneWidget);
     expect(find.text('无固定时间'), findsNothing);
     expect(find.text('通信原理'), findsNothing);
+  });
+
+  testWidgets('dark mode keeps timetable surfaces and today header readable', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      ThemePreferenceStore.storageKey: 'dark',
+    });
+    final preferences = await SharedPreferences.getInstance();
+    await _pumpSchedule(
+      tester,
+      semester,
+      currentDate: DateTime(2026, 2, 23),
+      store: ImportedSemesterStore(preferences: preferences),
+      themePreferenceStore: ThemePreferenceStore(preferences: preferences),
+    );
+
+    final materialApp = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    expect(materialApp.themeMode, ThemeMode.dark);
+    final theme = Theme.of(
+      tester.element(find.byKey(const ValueKey('timetable-header-1'))),
+    );
+    expect(theme.brightness, Brightness.dark);
+    expect(
+      _headerBackgroundColor(tester, 1),
+      theme.colorScheme.primaryContainer,
+    );
+    expect(_tableBackgroundColor(tester), theme.colorScheme.surface);
+    expect(find.text('天山堂A208'), findsOneWidget);
   });
 
   testWidgets('keeps schedule usable on Android phone width', (tester) async {
@@ -722,6 +849,7 @@ Future<void> _pumpSchedule(
   Semester semester, {
   ImportedSemesterStore? store,
   CourseCustomizationStore? customizationStore,
+  ThemePreferenceStore? themePreferenceStore,
   Size size = const Size(1280, 900),
   DateTime? currentDate,
 }) async {
@@ -738,6 +866,7 @@ Future<void> _pumpSchedule(
       semestersFuture: Future.value([semester]),
       importedSemesterStore: importedStore,
       courseCustomizationStore: customizationStore,
+      themePreferenceStore: themePreferenceStore,
       currentDate: currentDate ?? DateTime(2026, 2, 23),
     ),
   );
@@ -794,6 +923,14 @@ Color? _headerBackgroundColor(WidgetTester tester, int weekday) {
   final header = find.byKey(ValueKey('timetable-header-$weekday'));
   final decoration = tester.widget<DecoratedBox>(
     find.descendant(of: header, matching: find.byType(DecoratedBox)).first,
+  );
+  return (decoration.decoration as BoxDecoration).color;
+}
+
+Color? _tableBackgroundColor(WidgetTester tester) {
+  final table = find.byKey(const ValueKey('timetable-canvas'));
+  final decoration = tester.widget<DecoratedBox>(
+    find.descendant(of: table, matching: find.byType(DecoratedBox)).first,
   );
   return (decoration.decoration as BoxDecoration).color;
 }

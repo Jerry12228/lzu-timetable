@@ -78,7 +78,7 @@ class _AcademicSystemImportPageState extends State<_AcademicSystemImportPage> {
             icon: const Icon(Icons.close),
           ),
           title: const Text('教务系统导入'),
-          backgroundColor: Colors.white,
+          backgroundColor: Theme.of(context).colorScheme.surface,
           surfaceTintColor: Colors.transparent,
           actions: [
             IconButton(
@@ -92,7 +92,7 @@ class _AcademicSystemImportPageState extends State<_AcademicSystemImportPage> {
           children: [
             Container(
               width: double.infinity,
-              color: Colors.white,
+              color: Theme.of(context).colorScheme.surface,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               child: Row(
                 children: [

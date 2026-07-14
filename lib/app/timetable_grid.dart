@@ -131,7 +131,7 @@ class _TimetableCanvas extends StatelessWidget {
       borderRadius: BorderRadius.circular(8),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: scheme.surface,
           border: Border.all(color: scheme.outlineVariant),
           borderRadius: BorderRadius.circular(8),
         ),
@@ -171,6 +171,7 @@ class _TimetableCanvas extends StatelessWidget {
               height: rowHeight * _timetableSections.length,
               dayWidth: dayWidth,
               rowHeight: rowHeight,
+              backgroundColor: scheme.surface,
               suppressedLineSegments: suppressedLineSegments,
             ),
             if (onEmptyCellTap != null && selectedWeek != null)
@@ -342,7 +343,7 @@ class _HeaderCell extends StatelessWidget {
                   fontSize: dense ? 8.5 : 11.5,
                   color: isToday
                       ? Theme.of(context).colorScheme.onPrimaryContainer
-                      : Colors.black54,
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -379,7 +380,7 @@ class _SectionCell extends StatelessWidget {
       width: width,
       height: height,
       child: _TableCellShell(
-        background: const Color(0xFFFAFBFC),
+        background: Theme.of(context).colorScheme.surfaceContainerLow,
         dense: dense,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -419,7 +420,7 @@ class _SectionTimeText extends StatelessWidget {
       style: TextStyle(
         fontSize: dense ? 7.5 : 10,
         height: 1.1,
-        color: Colors.black54,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
         fontWeight: FontWeight.w600,
       ),
     );
@@ -434,6 +435,7 @@ class _GridLinesLayer extends StatelessWidget {
     required this.height,
     required this.dayWidth,
     required this.rowHeight,
+    required this.backgroundColor,
     required this.suppressedLineSegments,
   });
 
@@ -443,6 +445,7 @@ class _GridLinesLayer extends StatelessWidget {
   final double height;
   final double dayWidth;
   final double rowHeight;
+  final Color backgroundColor;
   final Map<int, List<_SuppressedLineSegment>> suppressedLineSegments;
 
   @override
@@ -458,6 +461,7 @@ class _GridLinesLayer extends StatelessWidget {
           rowHeight: rowHeight,
           rowCount: _timetableSections.length,
           dayCount: weekdays.length,
+          backgroundColor: backgroundColor,
           lineColor: Theme.of(context).colorScheme.outlineVariant,
           suppressedLineSegments: suppressedLineSegments,
         ),
@@ -473,6 +477,7 @@ class _GridLinesPainter extends CustomPainter {
     required this.rowHeight,
     required this.rowCount,
     required this.dayCount,
+    required this.backgroundColor,
     required this.lineColor,
     required this.suppressedLineSegments,
   });
@@ -481,12 +486,13 @@ class _GridLinesPainter extends CustomPainter {
   final double rowHeight;
   final int rowCount;
   final int dayCount;
+  final Color backgroundColor;
   final Color lineColor;
   final Map<int, List<_SuppressedLineSegment>> suppressedLineSegments;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final background = Paint()..color = Colors.white;
+    final background = Paint()..color = backgroundColor;
     canvas.drawRect(Offset.zero & size, background);
 
     final line = Paint()
@@ -541,6 +547,7 @@ class _GridLinesPainter extends CustomPainter {
         rowHeight != oldDelegate.rowHeight ||
         rowCount != oldDelegate.rowCount ||
         dayCount != oldDelegate.dayCount ||
+        backgroundColor != oldDelegate.backgroundColor ||
         lineColor != oldDelegate.lineColor ||
         suppressedLineSegments != oldDelegate.suppressedLineSegments;
   }
@@ -597,16 +604,20 @@ class _PositionedCourseBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = _courseColor(scheduled.course.name);
+    final scheme = Theme.of(context).colorScheme;
+    final brightness = Theme.of(context).brightness;
+    final color = _courseColor(scheduled.course.name, brightness);
     final session = scheduled.session;
     final shortBlock = !dense && height < 86;
+    final fillAlpha = brightness == Brightness.dark ? 0.24 : 0.12;
+    final borderAlpha = brightness == Brightness.dark ? 0.58 : 0.35;
     return Positioned(
       left: left,
       top: top,
       width: width,
       height: height,
       child: Material(
-        color: color.withValues(alpha: 0.12),
+        color: color.withValues(alpha: fillAlpha),
         borderRadius: BorderRadius.circular(dense ? 4 : 8),
         child: InkWell(
           onTap: onTap,
@@ -615,7 +626,7 @@ class _PositionedCourseBlock extends StatelessWidget {
             padding: EdgeInsets.all(dense ? 3 : 8),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(dense ? 4 : 8),
-              border: Border.all(color: color.withValues(alpha: 0.35)),
+              border: Border.all(color: color.withValues(alpha: borderAlpha)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -637,10 +648,10 @@ class _PositionedCourseBlock extends StatelessWidget {
                     session.location.isEmpty ? '地点未公布' : session.location,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 8.5,
                       height: 1.1,
-                      color: Colors.black87,
+                      color: scheme.onSurface,
                     ),
                   ),
                 ],
@@ -650,7 +661,7 @@ class _PositionedCourseBlock extends StatelessWidget {
                     session.location.isEmpty ? '地点未公布' : session.location,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11, color: Colors.black87),
+                    style: TextStyle(fontSize: 11, color: scheme.onSurface),
                   ),
                 ],
                 if (!dense && !shortBlock) ...[
@@ -659,7 +670,7 @@ class _PositionedCourseBlock extends StatelessWidget {
                     session.location.isEmpty ? '地点未公布' : session.location,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12, color: Colors.black87),
+                    style: TextStyle(fontSize: 12, color: scheme.onSurface),
                   ),
                   const Spacer(),
                   Text(
@@ -668,9 +679,9 @@ class _PositionedCourseBlock extends StatelessWidget {
                         : '${session.startTime}-${session.endTime}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11.5,
-                      color: Colors.black54,
+                      color: scheme.onSurfaceVariant,
                     ),
                   ),
                 ],
@@ -804,7 +815,7 @@ Map<int, List<_SuppressedLineSegment>> _suppressedLineSegmentsFor({
   return suppressed;
 }
 
-Color _courseColor(String key) {
+Color _courseColor(String key, Brightness brightness) {
   const colors = [
     Color(0xFF0F766E),
     Color(0xFF2563EB),
@@ -816,7 +827,15 @@ Color _courseColor(String key) {
     Color(0xFF334155),
   ];
   final hash = key.runes.fold<int>(0, (value, rune) => value + rune);
-  return colors[hash % colors.length];
+  final base = colors[hash % colors.length];
+  if (brightness == Brightness.light) {
+    return base;
+  }
+  final hsl = HSLColor.fromColor(base);
+  return hsl
+      .withLightness(hsl.lightness < 0.68 ? 0.68 : hsl.lightness)
+      .withSaturation(hsl.saturation < 0.72 ? 0.72 : hsl.saturation)
+      .toColor();
 }
 
 String _formatMonthDay(DateTime date) {

@@ -7,38 +7,69 @@ import 'timetable_grid.dart';
 import '../models/schedule_models.dart';
 import '../services/course_customization_store.dart';
 import '../services/imported_semester_store.dart';
+import '../services/theme_preference_store.dart';
 
-class CourseScheduleApp extends StatelessWidget {
+class CourseScheduleApp extends StatefulWidget {
   const CourseScheduleApp({
     super.key,
     this.semestersFuture,
     this.importedSemesterStore,
     this.courseCustomizationStore,
+    this.themePreferenceStore,
     this.currentDate,
   });
 
   final Future<List<Semester>>? semestersFuture;
   final ImportedSemesterStore? importedSemesterStore;
   final CourseCustomizationStore? courseCustomizationStore;
+  final ThemePreferenceStore? themePreferenceStore;
   final DateTime? currentDate;
+
+  @override
+  State<CourseScheduleApp> createState() => _CourseScheduleAppState();
+}
+
+class _CourseScheduleAppState extends State<CourseScheduleApp> {
+  late final ThemePreferenceStore _themePreferenceStore =
+      widget.themePreferenceStore ?? ThemePreferenceStore();
+  AppThemePreference _themePreference = AppThemePreference.system;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadThemePreference();
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'LZU Timetable',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0F766E)),
-        scaffoldBackgroundColor: const Color(0xFFF6F7F9),
-      ),
+      theme: _buildAppTheme(Brightness.light),
+      darkTheme: _buildAppTheme(Brightness.dark),
+      themeMode: _themeModeFor(_themePreference),
       home: _SemesterBootstrap(
-        semestersFuture: semestersFuture,
-        importedSemesterStore: importedSemesterStore,
-        courseCustomizationStore: courseCustomizationStore,
-        currentDate: currentDate,
+        semestersFuture: widget.semestersFuture,
+        importedSemesterStore: widget.importedSemesterStore,
+        courseCustomizationStore: widget.courseCustomizationStore,
+        themePreference: _themePreference,
+        onThemePreferenceChanged: _setThemePreference,
+        currentDate: widget.currentDate,
       ),
     );
+  }
+
+  Future<void> _loadThemePreference() async {
+    final preference = await _themePreferenceStore.load();
+    if (!mounted) {
+      return;
+    }
+    setState(() => _themePreference = preference);
+  }
+
+  Future<void> _setThemePreference(AppThemePreference preference) async {
+    setState(() => _themePreference = preference);
+    await _themePreferenceStore.save(preference);
   }
 }
 
@@ -47,12 +78,16 @@ class _SemesterBootstrap extends StatefulWidget {
     required this.semestersFuture,
     required this.importedSemesterStore,
     required this.courseCustomizationStore,
+    required this.themePreference,
+    required this.onThemePreferenceChanged,
     required this.currentDate,
   });
 
   final Future<List<Semester>>? semestersFuture;
   final ImportedSemesterStore? importedSemesterStore;
   final CourseCustomizationStore? courseCustomizationStore;
+  final AppThemePreference themePreference;
+  final ValueChanged<AppThemePreference> onThemePreferenceChanged;
   final DateTime? currentDate;
 
   @override
@@ -98,7 +133,11 @@ class _SemesterBootstrapState extends State<_SemesterBootstrap> {
         }
         final semesters = snapshot.data ?? const [];
         if (semesters.isEmpty) {
-          return _EmptyScheduleScreen(onManageRequested: _openManagementPage);
+          return _EmptyScheduleScreen(
+            themePreference: widget.themePreference,
+            onThemePreferenceChanged: widget.onThemePreferenceChanged,
+            onManageRequested: _openManagementPage,
+          );
         }
         return ScheduleHome(
           semesters: semesters,
@@ -106,6 +145,8 @@ class _SemesterBootstrapState extends State<_SemesterBootstrap> {
           onManageRequested: _openManagementPage,
           onCourseCustomizationSaved: _saveCourseCustomization,
           onManualCourseSaved: _saveManualCourse,
+          themePreference: widget.themePreference,
+          onThemePreferenceChanged: widget.onThemePreferenceChanged,
           currentDate: widget.currentDate,
         );
       },
@@ -171,6 +212,8 @@ class ScheduleHome extends StatefulWidget {
     this.onManageRequested,
     this.onCourseCustomizationSaved,
     this.onManualCourseSaved,
+    required this.themePreference,
+    required this.onThemePreferenceChanged,
     this.currentDate,
   });
 
@@ -184,6 +227,8 @@ class ScheduleHome extends StatefulWidget {
   onCourseCustomizationSaved;
   final Future<void> Function(String semesterId, Course course)?
   onManualCourseSaved;
+  final AppThemePreference themePreference;
+  final ValueChanged<AppThemePreference> onThemePreferenceChanged;
   final DateTime? currentDate;
 
   @override
@@ -236,16 +281,22 @@ class _ScheduleHomeState extends State<ScheduleHome> {
         title: const Text('课程表'),
         centerTitle: false,
         surfaceTintColor: Colors.transparent,
-        backgroundColor: Colors.white,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         actions: [
           if (mobile)
             _MobileScheduleMenu(
               semesters: widget.semesters,
               selectedSemester: _selectedSemester,
               onSemesterChanged: _selectSemester,
+              themePreference: widget.themePreference,
+              onThemePreferenceChanged: widget.onThemePreferenceChanged,
               onManageRequested: widget.onManageRequested,
             )
-          else
+          else ...[
+            _ThemeModeIconButton(
+              themePreference: widget.themePreference,
+              onThemePreferenceChanged: widget.onThemePreferenceChanged,
+            ),
             Padding(
               padding: const EdgeInsets.only(right: 10),
               child: TextButton.icon(
@@ -255,6 +306,7 @@ class _ScheduleHomeState extends State<ScheduleHome> {
                 label: const Text('管理'),
               ),
             ),
+          ],
         ],
       ),
       body: SafeArea(
@@ -398,6 +450,130 @@ class _ScheduleHomeState extends State<ScheduleHome> {
 
 DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
 
+ThemeData _buildAppTheme(Brightness brightness) {
+  final scheme = ColorScheme.fromSeed(
+    seedColor: const Color(0xFF0F766E),
+    brightness: brightness,
+  );
+  return ThemeData(
+    useMaterial3: true,
+    colorScheme: scheme,
+    scaffoldBackgroundColor: brightness == Brightness.light
+        ? const Color(0xFFF6F7F9)
+        : const Color(0xFF101413),
+    appBarTheme: AppBarTheme(
+      backgroundColor: scheme.surface,
+      foregroundColor: scheme.onSurface,
+      surfaceTintColor: Colors.transparent,
+    ),
+    popupMenuTheme: PopupMenuThemeData(color: scheme.surfaceContainerHigh),
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: scheme.surfaceContainerLow,
+      surfaceTintColor: Colors.transparent,
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: scheme.surface,
+      surfaceTintColor: Colors.transparent,
+    ),
+  );
+}
+
+ThemeMode _themeModeFor(AppThemePreference preference) {
+  return switch (preference) {
+    AppThemePreference.system => ThemeMode.system,
+    AppThemePreference.light => ThemeMode.light,
+    AppThemePreference.dark => ThemeMode.dark,
+  };
+}
+
+String _themePreferenceLabel(AppThemePreference preference) {
+  return switch (preference) {
+    AppThemePreference.system => '跟随系统',
+    AppThemePreference.light => '浅色',
+    AppThemePreference.dark => '深色',
+  };
+}
+
+IconData _themePreferenceIcon(AppThemePreference preference) {
+  return switch (preference) {
+    AppThemePreference.system => Icons.brightness_auto_outlined,
+    AppThemePreference.light => Icons.light_mode_outlined,
+    AppThemePreference.dark => Icons.dark_mode_outlined,
+  };
+}
+
+Future<void> _showThemePreferencePicker({
+  required BuildContext context,
+  required AppThemePreference current,
+  required ValueChanged<AppThemePreference> onChanged,
+}) async {
+  final selected = await showModalBottomSheet<AppThemePreference>(
+    context: context,
+    showDragHandle: true,
+    builder: (context) => _ThemePreferencePicker(current: current),
+  );
+  if (selected != null && selected != current) {
+    onChanged(selected);
+  }
+}
+
+class _ThemeModeIconButton extends StatelessWidget {
+  const _ThemeModeIconButton({
+    required this.themePreference,
+    required this.onThemePreferenceChanged,
+  });
+
+  final AppThemePreference themePreference;
+  final ValueChanged<AppThemePreference> onThemePreferenceChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      key: const ValueKey('desktop-theme-mode-button'),
+      tooltip: '切换主题',
+      onPressed: () => _showThemePreferencePicker(
+        context: context,
+        current: themePreference,
+        onChanged: onThemePreferenceChanged,
+      ),
+      icon: Icon(_themePreferenceIcon(themePreference)),
+    );
+  }
+}
+
+class _ThemePreferencePicker extends StatelessWidget {
+  const _ThemePreferencePicker({required this.current});
+
+  final AppThemePreference current;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(bottom: 6),
+            child: Text(
+              '选择主题',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+            ),
+          ),
+          for (final preference in AppThemePreference.values)
+            ListTile(
+              key: ValueKey('theme-mode-${preference.storageValue}'),
+              leading: Icon(_themePreferenceIcon(preference)),
+              title: Text(_themePreferenceLabel(preference)),
+              trailing: preference == current ? const Icon(Icons.check) : null,
+              onTap: () => Navigator.of(context).pop(preference),
+            ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+}
+
 class _ScheduleControls extends StatelessWidget {
   const _ScheduleControls({
     required this.compact,
@@ -428,7 +604,7 @@ class _ScheduleControls extends StatelessWidget {
         14,
       ),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         border: Border(
           top: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
           bottom: BorderSide(
@@ -485,12 +661,16 @@ class _MobileScheduleMenu extends StatelessWidget {
     required this.semesters,
     required this.selectedSemester,
     required this.onSemesterChanged,
+    required this.themePreference,
+    required this.onThemePreferenceChanged,
     required this.onManageRequested,
   });
 
   final List<Semester> semesters;
   final Semester selectedSemester;
   final ValueChanged<Semester> onSemesterChanged;
+  final AppThemePreference themePreference;
+  final ValueChanged<AppThemePreference> onThemePreferenceChanged;
   final VoidCallback? onManageRequested;
 
   @override
@@ -503,6 +683,12 @@ class _MobileScheduleMenu extends StatelessWidget {
         switch (action) {
           case _MobileScheduleMenuAction.chooseSemester:
             _showSemesterPicker(context);
+          case _MobileScheduleMenuAction.theme:
+            _showThemePreferencePicker(
+              context: context,
+              current: themePreference,
+              onChanged: onThemePreferenceChanged,
+            );
           case _MobileScheduleMenuAction.management:
             onManageRequested?.call();
         }
@@ -526,9 +712,38 @@ class _MobileScheduleMenu extends StatelessWidget {
                         selectedSemester.displayName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: Colors.black54,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right),
+              ],
+            ),
+          ),
+        ),
+        PopupMenuItem(
+          value: _MobileScheduleMenuAction.theme,
+          child: SizedBox(
+            width: 240,
+            child: Row(
+              children: [
+                Icon(_themePreferenceIcon(themePreference)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('主题'),
+                      Text(
+                        _themePreferenceLabel(themePreference),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -569,7 +784,7 @@ class _MobileScheduleMenu extends StatelessWidget {
   }
 }
 
-enum _MobileScheduleMenuAction { chooseSemester, management }
+enum _MobileScheduleMenuAction { chooseSemester, theme, management }
 
 class _MobileSemesterPicker extends StatelessWidget {
   const _MobileSemesterPicker({
@@ -823,6 +1038,7 @@ class _DetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
@@ -832,8 +1048,8 @@ class _DetailRow extends StatelessWidget {
             width: 82,
             child: Text(
               label,
-              style: const TextStyle(
-                color: Colors.black54,
+              style: TextStyle(
+                color: scheme.onSurfaceVariant,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -852,12 +1068,13 @@ class _SessionDetail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: const Color(0xFFF6F7F9),
+        color: scheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
@@ -897,17 +1114,71 @@ class _ErrorScreen extends StatelessWidget {
 }
 
 class _EmptyScheduleScreen extends StatelessWidget {
-  const _EmptyScheduleScreen({required this.onManageRequested});
+  const _EmptyScheduleScreen({
+    required this.themePreference,
+    required this.onThemePreferenceChanged,
+    required this.onManageRequested,
+  });
 
+  final AppThemePreference themePreference;
+  final ValueChanged<AppThemePreference> onThemePreferenceChanged;
   final VoidCallback onManageRequested;
 
   @override
   Widget build(BuildContext context) {
+    final mobile = MediaQuery.sizeOf(context).width < 600;
     return Scaffold(
       appBar: AppBar(
         title: const Text('课程表'),
-        backgroundColor: Colors.white,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         surfaceTintColor: Colors.transparent,
+        actions: [
+          if (mobile)
+            PopupMenuButton<_EmptyScheduleAction>(
+              key: const ValueKey('empty-schedule-menu-button'),
+              tooltip: '课程表菜单',
+              icon: const Icon(Icons.menu),
+              onSelected: (action) {
+                switch (action) {
+                  case _EmptyScheduleAction.theme:
+                    _showThemePreferencePicker(
+                      context: context,
+                      current: themePreference,
+                      onChanged: onThemePreferenceChanged,
+                    );
+                  case _EmptyScheduleAction.management:
+                    onManageRequested();
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: _EmptyScheduleAction.theme,
+                  child: Row(
+                    children: [
+                      Icon(_themePreferenceIcon(themePreference)),
+                      const SizedBox(width: 12),
+                      Text('主题：${_themePreferenceLabel(themePreference)}'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: _EmptyScheduleAction.management,
+                  child: Row(
+                    children: [
+                      Icon(Icons.settings_outlined),
+                      SizedBox(width: 12),
+                      Text('管理课程表'),
+                    ],
+                  ),
+                ),
+              ],
+            )
+          else
+            _ThemeModeIconButton(
+              themePreference: themePreference,
+              onThemePreferenceChanged: onThemePreferenceChanged,
+            ),
+        ],
       ),
       body: Center(
         child: Padding(
@@ -929,6 +1200,8 @@ class _EmptyScheduleScreen extends StatelessWidget {
     );
   }
 }
+
+enum _EmptyScheduleAction { theme, management }
 
 bool _hasAnyLink(Course course) =>
     course.courseDetailLink != null ||

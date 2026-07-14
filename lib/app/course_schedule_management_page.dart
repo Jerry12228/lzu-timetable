@@ -69,7 +69,7 @@ class _CourseScheduleManagementPageState
             icon: const Icon(Icons.arrow_back),
           ),
           title: const Text('管理课程表'),
-          backgroundColor: Colors.white,
+          backgroundColor: Theme.of(context).colorScheme.surface,
           surfaceTintColor: Colors.transparent,
           actions: [
             Padding(
@@ -290,10 +290,11 @@ class _ScheduleListItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final semester = entry.semester;
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+        color: scheme.surface,
+        border: Border.all(color: scheme.outlineVariant),
         borderRadius: BorderRadius.circular(8),
       ),
       child: ListTile(

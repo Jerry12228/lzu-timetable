@@ -66,7 +66,9 @@ class _QuickAddCourseDialogState extends State<QuickAddCourseDialog> {
               const SizedBox(height: 10),
               Text(
                 _selectedDateSummary(),
-                style: const TextStyle(color: Colors.black54),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 14),
               DropdownButtonFormField<int>(

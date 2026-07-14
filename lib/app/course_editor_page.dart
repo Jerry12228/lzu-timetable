@@ -62,7 +62,7 @@ class _CourseEditorPageState extends State<CourseEditorPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('编辑课程'),
-        backgroundColor: Colors.white,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         surfaceTintColor: Colors.transparent,
         actions: [
           IconButton(
@@ -332,6 +332,7 @@ class _ReadonlyRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Row(
@@ -340,8 +341,8 @@ class _ReadonlyRow extends StatelessWidget {
             width: 82,
             child: Text(
               label,
-              style: const TextStyle(
-                color: Colors.black54,
+              style: TextStyle(
+                color: scheme.onSurfaceVariant,
                 fontWeight: FontWeight.w600,
               ),
             ),
