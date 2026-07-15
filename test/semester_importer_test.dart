@@ -1,33 +1,33 @@
 import 'dart:io';
 
 import 'package:lzu_timetable/services/default_periods.dart';
+import 'package:lzu_timetable/models/timetable_sections.dart';
 import 'package:lzu_timetable/services/semester_importer.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  late final semester = SemesterImporter.parseFromHtml(
-    semesterId: '2025-2026-2',
+  late final semester = SemesterImporter.parseCourseHtml(
+    semesterId: 0,
     displayName: '2025-2026-2学期',
     termStartDate: null,
     courseHtml: File('assets/raw/2025-2026-2-courses.html').readAsStringSync(),
-    periodHtml: File('assets/raw/periods.html').readAsStringSync(),
   );
 
   test('default periods are hardcoded and reusable', () {
-    expect(DefaultPeriods.all, hasLength(48));
-    final morning = DefaultPeriods.all.firstWhere(
+    expect(AcademicPeriodMappings.all, hasLength(48));
+    final morning = AcademicPeriodMappings.all.firstWhere(
       (period) => period.name == '上午12节',
     );
     expect(morning.sections, ['第1节', '第2节']);
     expect(morning.startTime, '08:30');
     expect(morning.endTime, '10:10');
 
-    final noon = DefaultPeriods.all.firstWhere(
+    final noon = AcademicPeriodMappings.all.firstWhere(
       (period) => period.name == '中午1-2节',
     );
     expect(noon.sections, ['中午1节', '中午2节']);
 
-    final evening = DefaultPeriods.all.firstWhere(
+    final evening = AcademicPeriodMappings.all.firstWhere(
       (period) => period.name == '晚9-11节',
     );
     expect(evening.sections, ['第9节', '第10节', '第11节']);
@@ -35,7 +35,7 @@ void main() {
 
   test('parses bundled sample from course html only', () {
     final courseOnlySemester = SemesterImporter.parseCourseHtml(
-      semesterId: 'course-only',
+      semesterId: 0,
       displayName: '课程HTML导入',
       termStartDate: DateTime(2026, 2, 23),
       courseHtml: File(
@@ -44,7 +44,11 @@ void main() {
     );
 
     expect(courseOnlySemester.courses, hasLength(19));
-    expect(courseOnlySemester.periods, hasLength(48));
+    expect(TimetableSections.all, hasLength(14));
+    expect(TimetableSections.byId('第1节').shortLabel, '1');
+    expect(TimetableSections.byId('第1节').startTime, '08:30');
+    expect(TimetableSections.byId('中午1节').shortLabel, '午1');
+    expect(TimetableSections.byId('第12节').endTime, '22:30');
     expect(
       courseOnlySemester.dateRangeForWeek(1)!.start,
       DateTime(2026, 2, 23),
@@ -61,7 +65,7 @@ void main() {
     ).readAsStringSync();
 
     final completePageSemester = SemesterImporter.parseCourseHtml(
-      semesterId: 'complete-page',
+      semesterId: 0,
       displayName: '完整页面导入',
       termStartDate: null,
       courseHtml: '$courseHtml\n$completePageHtml',
@@ -72,7 +76,6 @@ void main() {
 
   test('parses bundled sample counts', () {
     expect(semester.courses, hasLength(19));
-    expect(semester.periods, hasLength(48));
     expect(semester.maxWeek, 17);
   });
 
@@ -112,7 +115,7 @@ void main() {
     expect(botanyLab.teachers, ['林雯', '赵宁', '杨梅', '孙丽娟']);
     expect(botanyLab.sessions, isNotEmpty);
     expect(botanyLab.sessions.every((session) => session.week > 0), isTrue);
-    expect(botanyLab.sessions.first.periodName, '上午1-4节');
+    expect(botanyLab.sessions.first.sections, ['第1节', '第2节', '第3节', '第4节']);
     expect(botanyLab.sessions.last.location, '陇山堂A323');
 
     final calculus = semester.courses.firstWhere(

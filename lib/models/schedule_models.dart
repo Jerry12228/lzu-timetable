@@ -1,3 +1,5 @@
+import 'timetable_sections.dart';
+
 const weekdays = <String>['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'];
 
 const timetableSectionOrder = <String>[
@@ -17,7 +19,7 @@ const timetableSectionOrder = <String>[
   '第12节',
 ];
 
-const manualCourseCodePrefix = 'local-manual-';
+enum CourseOrigin { imported, manual }
 
 class TimetableCellSelection {
   const TimetableCellSelection({
@@ -33,68 +35,52 @@ class TimetableCellSelection {
   final DateTime? date;
 }
 
-class PeriodDefinition {
-  const PeriodDefinition({
-    required this.order,
-    required this.name,
-    required this.sections,
-    required this.startTime,
-    required this.endTime,
-  });
-
-  final int order;
-  final String name;
-  final List<String> sections;
-  final String startTime;
-  final String endTime;
-
-  int get startMinutes => parseClockMinutes(startTime);
-  int get endMinutes => parseClockMinutes(endTime);
-}
-
 class CourseSession {
   const CourseSession({
     required this.week,
     required this.weekday,
-    required this.weekdayText,
-    required this.periodName,
-    required this.startTime,
-    required this.endTime,
-    required this.sections,
+    required this.startSection,
+    required this.endSection,
     required this.location,
-  });
+  }) : assert(week > 0),
+       assert(weekday >= 1 && weekday <= 7),
+       assert(startSection >= 0),
+       assert(endSection >= startSection && endSection < 14);
 
   final int week;
   final int weekday;
-  final String weekdayText;
-  final String periodName;
-  final String startTime;
-  final String endTime;
-  final List<String> sections;
+  final int startSection;
+  final int endSection;
   final String location;
 
   bool occursInWeek(int value) => week == value;
 
-  int get startMinutes => startTime.isEmpty ? 0 : parseClockMinutes(startTime);
+  String get weekdayText => weekdays[weekday - 1];
+  String get startTime => TimetableSections.byOrder(startSection).startTime;
+  String get endTime => TimetableSections.byOrder(endSection).endTime;
+  int get startMinutes => TimetableSections.byOrder(startSection).startMinutes;
+  List<String> get sections =>
+      TimetableSections.idsInRange(startSection, endSection);
+
+  String get periodName {
+    if (startSection == endSection) {
+      return TimetableSections.byOrder(startSection).id;
+    }
+    return '${TimetableSections.byOrder(startSection).id}至${TimetableSections.byOrder(endSection).id}';
+  }
 
   CourseSession copyWith({
     int? week,
     int? weekday,
-    String? weekdayText,
-    String? periodName,
-    String? startTime,
-    String? endTime,
-    List<String>? sections,
+    int? startSection,
+    int? endSection,
     String? location,
   }) {
     return CourseSession(
       week: week ?? this.week,
       weekday: weekday ?? this.weekday,
-      weekdayText: weekdayText ?? this.weekdayText,
-      periodName: periodName ?? this.periodName,
-      startTime: startTime ?? this.startTime,
-      endTime: endTime ?? this.endTime,
-      sections: sections ?? this.sections,
+      startSection: startSection ?? this.startSection,
+      endSection: endSection ?? this.endSection,
       location: location ?? this.location,
     );
   }
@@ -102,6 +88,8 @@ class CourseSession {
 
 class Course {
   const Course({
+    this.id = 0,
+    this.origin = CourseOrigin.imported,
     required this.courseCode,
     required this.sequence,
     required this.name,
@@ -118,8 +106,10 @@ class Course {
     required this.sessions,
   });
 
-  final String courseCode;
-  final String sequence;
+  final int id;
+  final CourseOrigin origin;
+  final String? courseCode;
+  final String? sequence;
   final String name;
   final List<String> teachers;
   final String credits;
@@ -134,9 +124,11 @@ class Course {
   final List<CourseSession> sessions;
 
   bool get hasFixedSchedule => sessions.isNotEmpty;
-  bool get isManual => courseCode.startsWith(manualCourseCodePrefix);
+  bool get isManual => origin == CourseOrigin.manual;
 
   Course copyWith({
+    int? id,
+    CourseOrigin? origin,
     String? name,
     List<String>? teachers,
     String? credits,
@@ -148,6 +140,8 @@ class Course {
     List<CourseSession>? sessions,
   }) {
     return Course(
+      id: id ?? this.id,
+      origin: origin ?? this.origin,
       courseCode: courseCode,
       sequence: sequence,
       name: name ?? this.name,
@@ -166,27 +160,6 @@ class Course {
   }
 }
 
-class CourseKey {
-  const CourseKey({required this.courseCode, required this.sequence});
-
-  factory CourseKey.fromCourse(Course course) =>
-      CourseKey(courseCode: course.courseCode, sequence: course.sequence);
-
-  final String courseCode;
-  final String sequence;
-
-  String get value => '$courseCode::$sequence';
-
-  @override
-  bool operator ==(Object other) =>
-      other is CourseKey &&
-      other.courseCode == courseCode &&
-      other.sequence == sequence;
-
-  @override
-  int get hashCode => Object.hash(courseCode, sequence);
-}
-
 class CourseMetadata {
   const CourseMetadata({
     required this.name,
@@ -199,18 +172,16 @@ class CourseMetadata {
     required this.material,
   });
 
-  factory CourseMetadata.fromCourse(Course course) {
-    return CourseMetadata(
-      name: course.name,
-      teachers: course.teachers,
-      credits: course.credits,
-      selectionType: course.selectionType,
-      assessment: course.assessment,
-      examNature: course.examNature,
-      deferredExam: course.deferredExam,
-      material: course.material,
-    );
-  }
+  factory CourseMetadata.fromCourse(Course course) => CourseMetadata(
+    name: course.name,
+    teachers: course.teachers,
+    credits: course.credits,
+    selectionType: course.selectionType,
+    assessment: course.assessment,
+    examNature: course.examNature,
+    deferredExam: course.deferredExam,
+    material: course.material,
+  );
 
   final String name;
   final List<String> teachers;
@@ -221,74 +192,56 @@ class CourseMetadata {
   final String deferredExam;
   final String material;
 
-  CourseMetadata copyWith({
-    String? name,
-    List<String>? teachers,
-    String? credits,
-    String? selectionType,
-    String? assessment,
-    String? examNature,
-    String? deferredExam,
-    String? material,
-  }) {
-    return CourseMetadata(
-      name: name ?? this.name,
-      teachers: teachers ?? this.teachers,
-      credits: credits ?? this.credits,
-      selectionType: selectionType ?? this.selectionType,
-      assessment: assessment ?? this.assessment,
-      examNature: examNature ?? this.examNature,
-      deferredExam: deferredExam ?? this.deferredExam,
-      material: material ?? this.material,
-    );
-  }
+  CourseMetadata copyWith({String? name}) => CourseMetadata(
+    name: name ?? this.name,
+    teachers: teachers,
+    credits: credits,
+    selectionType: selectionType,
+    assessment: assessment,
+    examNature: examNature,
+    deferredExam: deferredExam,
+    material: material,
+  );
 
-  Course applyTo(Course source, List<CourseSession> sessions) {
-    return source.copyWith(
-      name: name,
-      teachers: teachers,
-      credits: credits,
-      selectionType: selectionType,
-      assessment: assessment,
-      examNature: examNature,
-      deferredExam: deferredExam,
-      material: material,
-      sessions: sessions,
-    );
-  }
+  Course applyTo(Course source, List<CourseSession> sessions) =>
+      source.copyWith(
+        name: name,
+        teachers: teachers,
+        credits: credits,
+        selectionType: selectionType,
+        assessment: assessment,
+        examNature: examNature,
+        deferredExam: deferredExam,
+        material: material,
+        sessions: sessions,
+      );
 }
 
 class CourseCustomization {
   const CourseCustomization({
-    required this.courseKey,
+    required this.courseId,
     required this.metadata,
     required this.sessions,
     this.isDeleted = false,
   });
 
-  factory CourseCustomization.fromCourse(Course course) {
-    return CourseCustomization(
-      courseKey: CourseKey.fromCourse(course),
-      metadata: CourseMetadata.fromCourse(course),
-      sessions: course.sessions,
-    );
-  }
+  factory CourseCustomization.fromCourse(Course course) => CourseCustomization(
+    courseId: course.id,
+    metadata: CourseMetadata.fromCourse(course),
+    sessions: course.sessions,
+  );
 
-  factory CourseCustomization.deleted(Course course) {
-    return CourseCustomization(
-      courseKey: CourseKey.fromCourse(course),
-      metadata: CourseMetadata.fromCourse(course),
-      sessions: course.sessions,
-      isDeleted: true,
-    );
-  }
+  factory CourseCustomization.deleted(Course course) => CourseCustomization(
+    courseId: course.id,
+    metadata: CourseMetadata.fromCourse(course),
+    sessions: course.sessions,
+    isDeleted: true,
+  );
 
-  final CourseKey courseKey;
+  final int courseId;
   final CourseMetadata metadata;
   final List<CourseSession> sessions;
   final bool isDeleted;
-
-  Course applyTo(Course source) => metadata.applyTo(source, sessions);
 }
 
 class ScheduledCourse {
@@ -311,24 +264,20 @@ class Semester {
     required this.displayName,
     required this.termStartDate,
     required this.courses,
-    required this.periods,
     this.weekCount = 0,
   });
 
-  final String id;
+  final int id;
   final String displayName;
   final DateTime? termStartDate;
   final List<Course> courses;
-  final List<PeriodDefinition> periods;
   final int weekCount;
 
   int get lastScheduledWeek {
     var maxWeek = 1;
     for (final course in courses) {
       for (final session in course.sessions) {
-        if (session.week > maxWeek) {
-          maxWeek = session.week;
-        }
+        if (session.week > maxWeek) maxWeek = session.week;
       }
     }
     return maxWeek;
@@ -341,22 +290,18 @@ class Semester {
       courses.where((course) => !course.hasFixedSchedule).toList();
 
   Semester copyWith({
-    String? id,
+    int? id,
     String? displayName,
     DateTime? termStartDate,
     List<Course>? courses,
-    List<PeriodDefinition>? periods,
     int? weekCount,
-  }) {
-    return Semester(
-      id: id ?? this.id,
-      displayName: displayName ?? this.displayName,
-      termStartDate: termStartDate ?? this.termStartDate,
-      courses: courses ?? this.courses,
-      periods: periods ?? this.periods,
-      weekCount: weekCount ?? this.weekCount,
-    );
-  }
+  }) => Semester(
+    id: id ?? this.id,
+    displayName: displayName ?? this.displayName,
+    termStartDate: termStartDate ?? this.termStartDate,
+    courses: courses ?? this.courses,
+    weekCount: weekCount ?? this.weekCount,
+  );
 
   List<ScheduledCourse> scheduledCoursesForWeek(int week) {
     final scheduled = <ScheduledCourse>[];
@@ -369,15 +314,11 @@ class Semester {
     }
     scheduled.sort((a, b) {
       final weekdayCompare = a.session.weekday.compareTo(b.session.weekday);
-      if (weekdayCompare != 0) {
-        return weekdayCompare;
-      }
-      final timeCompare = a.session.startMinutes.compareTo(
-        b.session.startMinutes,
+      if (weekdayCompare != 0) return weekdayCompare;
+      final timeCompare = a.session.startSection.compareTo(
+        b.session.startSection,
       );
-      if (timeCompare != 0) {
-        return timeCompare;
-      }
+      if (timeCompare != 0) return timeCompare;
       return a.course.name.compareTo(b.course.name);
     });
     return scheduled;
@@ -385,9 +326,7 @@ class Semester {
 
   DateRange? dateRangeForWeek(int week) {
     final startDate = termStartDate;
-    if (startDate == null) {
-      return null;
-    }
+    if (startDate == null) return null;
     final start = DateTime(
       startDate.year,
       startDate.month,
@@ -399,9 +338,7 @@ class Semester {
   bool containsDate(DateTime date) {
     final firstWeek = dateRangeForWeek(1);
     final lastWeek = dateRangeForWeek(maxWeek);
-    if (firstWeek == null || lastWeek == null) {
-      return false;
-    }
+    if (firstWeek == null || lastWeek == null) return false;
     final normalized = _dateOnly(date);
     return !normalized.isBefore(firstWeek.start) &&
         !normalized.isAfter(lastWeek.end);
@@ -410,28 +347,12 @@ class Semester {
   int weekForDate(DateTime date) {
     final firstWeek = dateRangeForWeek(1);
     final lastWeek = dateRangeForWeek(maxWeek);
-    if (firstWeek == null || lastWeek == null) {
-      return 1;
-    }
+    if (firstWeek == null || lastWeek == null) return 1;
     final normalized = _dateOnly(date);
-    if (normalized.isBefore(firstWeek.start)) {
-      return 1;
-    }
-    if (normalized.isAfter(lastWeek.end)) {
-      return maxWeek;
-    }
+    if (normalized.isBefore(firstWeek.start)) return 1;
+    if (normalized.isAfter(lastWeek.end)) return maxWeek;
     return normalized.difference(firstWeek.start).inDays ~/ 7 + 1;
   }
 }
 
 DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
-
-int parseClockMinutes(String value) {
-  final parts = value.split(':');
-  if (parts.length != 2) {
-    throw FormatException('Invalid clock value: $value');
-  }
-  final hour = int.parse(parts[0]);
-  final minute = int.parse(parts[1]);
-  return hour * 60 + minute;
-}

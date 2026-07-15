@@ -4,15 +4,15 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../models/schedule_models.dart';
-import '../services/imported_semester_store.dart';
 import '../services/semester_importer.dart';
+import '../services/timetable_repository.dart';
 import 'timetable_grid.dart';
 
 class ImportSchedulePage extends StatefulWidget {
   const ImportSchedulePage({
     super.key,
     required this.existingDisplayNames,
-    required this.store,
+    required this.repository,
     this.editingSemesterId,
     this.initialDisplayName,
     this.initialTermStartDate,
@@ -23,8 +23,8 @@ class ImportSchedulePage extends StatefulWidget {
   });
 
   final List<String> existingDisplayNames;
-  final ImportedSemesterStore store;
-  final String? editingSemesterId;
+  final TimetableRepository repository;
+  final int? editingSemesterId;
   final String? initialDisplayName;
   final DateTime? initialTermStartDate;
   final Semester? initialSemester;
@@ -290,13 +290,13 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
       final hasValidPreview =
           preview != null && _previewKey == _currentInputKey;
       final semester = hasValidPreview ? preview : _parseInputForPreview();
-      final record = await widget.store.saveRecord(
+      final id = await widget.repository.saveSchedule(
         semesterId: widget.editingSemesterId,
         semester: semester,
-        existingDisplayNames: widget.existingDisplayNames,
+        replaceImportedCourses: _htmlController.text.trim().isNotEmpty,
       );
       if (mounted) {
-        Navigator.of(context).pop(record.id);
+        Navigator.of(context).pop(id);
       }
     } catch (error) {
       if (mounted) {
@@ -333,7 +333,7 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
       );
     } else {
       semester = SemesterImporter.parseCourseHtml(
-        semesterId: widget.editingSemesterId ?? 'preview',
+        semesterId: widget.editingSemesterId ?? 0,
         displayName: displayName,
         termStartDate: termStartDate,
         courseHtml: courseHtml,
@@ -506,7 +506,6 @@ class _PreviewCardState extends State<_PreviewCard> {
           TimetableGrid(
             compact: compact,
             scheduled: scheduled,
-            periods: semester.periods,
             weekDateRange: semester.dateRangeForWeek(_selectedWeek),
             onCourseTap: (course, session) =>
                 _showPreviewCourseDetails(context, course, session),
@@ -576,7 +575,7 @@ class _PreviewCourseDialog extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _PreviewLine(label: '课程号', value: course.courseCode),
+            _PreviewLine(label: '课程号', value: course.courseCode ?? ''),
             _PreviewLine(label: '任课教师', value: course.teachers.join('、')),
             _PreviewLine(label: '学分', value: course.credits),
             _PreviewLine(label: '考核方式', value: course.assessment),

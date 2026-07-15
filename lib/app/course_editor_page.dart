@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/schedule_models.dart';
+import '../models/timetable_sections.dart';
 import 'section_button_grid.dart';
 
 class CourseEditorPage extends StatefulWidget {
@@ -81,8 +82,8 @@ class _CourseEditorPageState extends State<CourseEditorPage> {
             if (widget.course.isManual)
               const _ReadonlyRow(label: '课程来源', value: '手动添加')
             else ...[
-              _ReadonlyRow(label: '课程号', value: widget.course.courseCode),
-              _ReadonlyRow(label: '课程序号', value: widget.course.sequence),
+              _ReadonlyRow(label: '课程号', value: widget.course.courseCode ?? ''),
+              _ReadonlyRow(label: '课程序号', value: widget.course.sequence ?? ''),
             ],
             const SizedBox(height: 10),
             TextField(
@@ -216,7 +217,6 @@ class _CourseEditorPageState extends State<CourseEditorPage> {
     final updated = await showDialog<CourseSession>(
       context: context,
       builder: (context) => _CourseSessionEditorDialog(
-        periods: widget.semester.periods,
         maxWeek: widget.semester.maxWeek,
         initialSession: index == null ? null : _sessions[index],
       ),
@@ -295,7 +295,7 @@ class _CourseEditorPageState extends State<CourseEditorPage> {
     }
     Navigator.of(context).pop(
       CourseCustomization(
-        courseKey: CourseKey.fromCourse(widget.course),
+        courseId: widget.course.id,
         metadata: CourseMetadata(
           name: name,
           teachers: _splitTeachers(_teachersController.text),
@@ -397,12 +397,10 @@ class _SessionEditorRow extends StatelessWidget {
 
 class _CourseSessionEditorDialog extends StatefulWidget {
   const _CourseSessionEditorDialog({
-    required this.periods,
     required this.maxWeek,
     required this.initialSession,
   });
 
-  final List<PeriodDefinition> periods;
   final int maxWeek;
   final CourseSession? initialSession;
 
@@ -426,7 +424,7 @@ class _CourseSessionEditorDialogState
     _weekday = session?.weekday ?? 1;
     _sections = {
       ...(session?.sections ?? const []),
-      if (session == null) _singleSectionPeriods.first.sections.single,
+      if (session == null) TimetableSections.all.first.id,
     };
   }
 
@@ -482,7 +480,6 @@ class _CourseSessionEditorDialogState
               const Text('上课节次', style: TextStyle(fontWeight: FontWeight.w800)),
               const SizedBox(height: 8),
               SectionButtonGrid(
-                periods: _singleSectionPeriods,
                 selectedSections: _sections,
                 keyPrefix: 'session-section',
                 onToggle: _toggleSection,
@@ -517,32 +514,19 @@ class _CourseSessionEditorDialogState
       setState(() => _errorMessage = '上课节次必须连续');
       return;
     }
-    final periods = _selectedSectionPeriods;
+    final selectedOrders = [
+      for (final section in TimetableSections.all)
+        if (_sections.contains(section.id)) section.order,
+    ];
     final session = CourseSession(
       week: _week,
       weekday: _weekday,
-      weekdayText: weekdays[_weekday - 1],
-      periodName: _sessionPeriodName(periods),
-      startTime: periods.first.startTime,
-      endTime: periods.last.endTime,
-      sections: [for (final period in periods) period.sections.single],
+      startSection: selectedOrders.first,
+      endSection: selectedOrders.last,
       location: widget.initialSession?.location ?? '',
     );
     Navigator.of(context).pop(session);
   }
-
-  List<PeriodDefinition> get _singleSectionPeriods => [
-    for (final section in timetableSectionOrder)
-      widget.periods.firstWhere(
-        (period) =>
-            period.sections.length == 1 && period.sections.single == section,
-      ),
-  ];
-
-  List<PeriodDefinition> get _selectedSectionPeriods => [
-    for (final period in _singleSectionPeriods)
-      if (_sections.contains(period.sections.single)) period,
-  ];
 
   bool get _hasContinuousSections {
     final indexes = [
@@ -563,13 +547,6 @@ class _CourseSessionEditorDialogState
       _errorMessage = null;
     });
   }
-}
-
-String _sessionPeriodName(List<PeriodDefinition> periods) {
-  if (periods.length == 1) {
-    return periods.single.name;
-  }
-  return '${periods.first.sections.single}至${periods.last.sections.single}';
 }
 
 List<String> _splitTeachers(String value) {

@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../models/schedule_models.dart';
+import '../models/timetable_sections.dart';
 
 class TimetableGrid extends StatelessWidget {
   const TimetableGrid({
     super.key,
     required this.compact,
     required this.scheduled,
-    required this.periods,
     required this.onCourseTap,
     this.selectedWeek,
     this.onEmptyCellTap,
@@ -17,7 +17,6 @@ class TimetableGrid extends StatelessWidget {
 
   final bool compact;
   final List<ScheduledCourse> scheduled;
-  final List<PeriodDefinition> periods;
   final void Function(Course course, CourseSession? session) onCourseTap;
   final int? selectedWeek;
   final ValueChanged<TimetableCellSelection>? onEmptyCellTap;
@@ -47,7 +46,7 @@ class TimetableGrid extends StatelessWidget {
             : _datedHeaderHeight;
         final tableHeight =
             headerHeight + _rowHeight * _timetableSections.length;
-        final sectionTimes = _singleSectionTimes(periods);
+        final sectionTimes = _singleSectionTimes();
 
         final table = SizedBox(
           key: const ValueKey('timetable-canvas'),
@@ -674,9 +673,7 @@ class _PositionedCourseBlock extends StatelessWidget {
                   ),
                   const Spacer(),
                   Text(
-                    session.startTime.isEmpty
-                        ? session.periodName
-                        : '${session.startTime}-${session.endTime}',
+                    '${session.startTime}-${session.endTime}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -724,36 +721,18 @@ class _SuppressedLineSegment {
   final double end;
 }
 
-const _timetableSections = [
-  _TimetableSection(id: '第1节', label: '第1节'),
-  _TimetableSection(id: '第2节', label: '第2节'),
-  _TimetableSection(id: '第3节', label: '第3节'),
-  _TimetableSection(id: '第4节', label: '第4节'),
-  _TimetableSection(id: '中午1节', label: '中午1'),
-  _TimetableSection(id: '中午2节', label: '中午2'),
-  _TimetableSection(id: '第5节', label: '第5节'),
-  _TimetableSection(id: '第6节', label: '第6节'),
-  _TimetableSection(id: '第7节', label: '第7节'),
-  _TimetableSection(id: '第8节', label: '第8节'),
-  _TimetableSection(id: '第9节', label: '第9节'),
-  _TimetableSection(id: '第10节', label: '第10节'),
-  _TimetableSection(id: '第11节', label: '第11节'),
-  _TimetableSection(id: '第12节', label: '第12节'),
+final _timetableSections = [
+  for (final section in TimetableSections.all)
+    _TimetableSection(id: section.id, label: section.shortLabel),
 ];
 
-Map<String, _SectionTime> _singleSectionTimes(List<PeriodDefinition> periods) {
-  final result = <String, _SectionTime>{};
-  for (final period in periods) {
-    if (period.sections.length != 1) {
-      continue;
-    }
-    result.putIfAbsent(
-      period.sections.single,
-      () => _SectionTime(startTime: period.startTime, endTime: period.endTime),
-    );
-  }
-  return result;
-}
+Map<String, _SectionTime> _singleSectionTimes() => {
+  for (final section in TimetableSections.all)
+    section.id: _SectionTime(
+      startTime: section.startTime,
+      endTime: section.endTime,
+    ),
+};
 
 _SectionSpan? _sectionSpanFor(CourseSession session) {
   final indexes =

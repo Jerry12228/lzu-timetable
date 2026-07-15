@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/schedule_models.dart';
 import '../services/academic_course_page_recognizer.dart';
-import '../services/imported_semester_store.dart';
+import '../services/timetable_repository.dart';
 import 'academic_system_import.dart';
 import 'import_schedule_page.dart';
 
@@ -13,18 +13,18 @@ class CourseScheduleManagementResult {
   });
 
   final bool changed;
-  final String? selectedSemesterId;
+  final int? selectedSemesterId;
 }
 
 class CourseScheduleManagementPage extends StatefulWidget {
   const CourseScheduleManagementPage({
     super.key,
     required this.loadSemesters,
-    required this.store,
+    required this.repository,
   });
 
   final Future<List<Semester>> Function() loadSemesters;
-  final ImportedSemesterStore store;
+  final TimetableRepository repository;
 
   @override
   State<CourseScheduleManagementPage> createState() =>
@@ -36,19 +36,12 @@ class _CourseScheduleManagementPageState
   late Future<List<_ManagedSemester>> _entriesFuture = _loadEntries();
   bool _changed = false;
   bool _canPop = false;
-  String? _selectedSemesterId;
+  int? _selectedSemesterId;
 
   Future<List<_ManagedSemester>> _loadEntries() async {
-    final results = await Future.wait<Object>([
-      widget.loadSemesters(),
-      widget.store.loadRecords(),
-    ]);
-    final semesters = results[0] as List<Semester>;
-    final records = results[1] as List<ImportedSemesterRecord>;
-    final recordsById = {for (final record in records) record.id: record};
+    final semesters = await widget.loadSemesters();
     return [
-      for (final semester in semesters)
-        _ManagedSemester(semester: semester, record: recordsById[semester.id]),
+      for (final semester in semesters) _ManagedSemester(semester: semester),
     ];
   }
 
@@ -191,14 +184,14 @@ class _CourseScheduleManagementPageState
       return;
     }
     final semester = entry?.semester;
-    final updatedId = await Navigator.of(context).push<String>(
+    final updatedId = await Navigator.of(context).push<int>(
       MaterialPageRoute(
         builder: (context) => ImportSchedulePage(
           existingDisplayNames: [
             for (final item in entries)
               if (item.semester.id != semester?.id) item.semester.displayName,
           ],
-          store: widget.store,
+          repository: widget.repository,
           editingSemesterId: recognized == null ? semester?.id : null,
           initialDisplayName: recognized?.displayName ?? semester?.displayName,
           initialTermStartDate: semester?.termStartDate,
@@ -240,7 +233,7 @@ class _CourseScheduleManagementPageState
     if (shouldDelete != true || !mounted) {
       return;
     }
-    await widget.store.deleteSemester(entry.semester.id);
+    await widget.repository.deleteSemester(entry.semester.id);
     if (!mounted) {
       return;
     }
@@ -270,10 +263,9 @@ class _CourseScheduleManagementPageState
 enum _AddScheduleMethod { academicSystem, manualHtml }
 
 class _ManagedSemester {
-  const _ManagedSemester({required this.semester, required this.record});
+  const _ManagedSemester({required this.semester});
 
   final Semester semester;
-  final ImportedSemesterRecord? record;
 }
 
 class _ScheduleListItem extends StatelessWidget {

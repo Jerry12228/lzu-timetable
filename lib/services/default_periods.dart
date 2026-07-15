@@ -1,9 +1,25 @@
-import '../models/schedule_models.dart';
+class AcademicPeriodMapping {
+  const AcademicPeriodMapping({
+    required this.order,
+    required this.name,
+    required this.sections,
+    required this.startTime,
+    required this.endTime,
+  });
 
-class DefaultPeriods {
-  const DefaultPeriods._();
+  final int order;
+  final String name;
+  final List<String> sections;
+  final String startTime;
+  final String endTime;
+}
 
-  static const all = <PeriodDefinition>[
+typedef PeriodDefinition = AcademicPeriodMapping;
+
+class AcademicPeriodMappings {
+  const AcademicPeriodMappings._();
+
+  static const all = <AcademicPeriodMapping>[
     PeriodDefinition(
       order: 1,
       name: '上午12节',

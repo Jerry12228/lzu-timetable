@@ -1,27 +1,27 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'course_editor_page.dart';
 import 'course_schedule_management_page.dart';
 import 'quick_add_course_dialog.dart';
 import 'timetable_grid.dart';
+import '../database/app_database.dart';
 import '../models/schedule_models.dart';
-import '../services/course_customization_store.dart';
-import '../services/imported_semester_store.dart';
+import '../services/timetable_repository.dart';
 import '../services/theme_preference_store.dart';
 
 class CourseScheduleApp extends StatefulWidget {
   const CourseScheduleApp({
     super.key,
     this.semestersFuture,
-    this.importedSemesterStore,
-    this.courseCustomizationStore,
+    this.repository,
     this.themePreferenceStore,
     this.currentDate,
   });
 
   final Future<List<Semester>>? semestersFuture;
-  final ImportedSemesterStore? importedSemesterStore;
-  final CourseCustomizationStore? courseCustomizationStore;
+  final TimetableRepository? repository;
   final ThemePreferenceStore? themePreferenceStore;
   final DateTime? currentDate;
 
@@ -50,8 +50,7 @@ class _CourseScheduleAppState extends State<CourseScheduleApp> {
       themeMode: _themeModeFor(_themePreference),
       home: _SemesterBootstrap(
         semestersFuture: widget.semestersFuture,
-        importedSemesterStore: widget.importedSemesterStore,
-        courseCustomizationStore: widget.courseCustomizationStore,
+        repository: widget.repository,
         themePreference: _themePreference,
         onThemePreferenceChanged: _setThemePreference,
         currentDate: widget.currentDate,
@@ -76,16 +75,14 @@ class _CourseScheduleAppState extends State<CourseScheduleApp> {
 class _SemesterBootstrap extends StatefulWidget {
   const _SemesterBootstrap({
     required this.semestersFuture,
-    required this.importedSemesterStore,
-    required this.courseCustomizationStore,
+    required this.repository,
     required this.themePreference,
     required this.onThemePreferenceChanged,
     required this.currentDate,
   });
 
   final Future<List<Semester>>? semestersFuture;
-  final ImportedSemesterStore? importedSemesterStore;
-  final CourseCustomizationStore? courseCustomizationStore;
+  final TimetableRepository? repository;
   final AppThemePreference themePreference;
   final ValueChanged<AppThemePreference> onThemePreferenceChanged;
   final DateTime? currentDate;
@@ -95,29 +92,24 @@ class _SemesterBootstrap extends StatefulWidget {
 }
 
 class _SemesterBootstrapState extends State<_SemesterBootstrap> {
-  late final ImportedSemesterStore _importedSemesterStore =
-      widget.importedSemesterStore ?? ImportedSemesterStore();
-  late final CourseCustomizationStore _courseCustomizationStore =
-      widget.courseCustomizationStore ?? CourseCustomizationStore();
+  late final AppDatabase? _ownedDatabase =
+      widget.repository == null && widget.semestersFuture == null
+      ? AppDatabase()
+      : null;
+  late final TimetableRepository _repository =
+      widget.repository ?? TimetableRepository(_ownedDatabase!);
   late Future<List<Semester>> _semestersFuture = _loadSemesters();
-  String? _selectedSemesterId;
+  int? _selectedSemesterId;
 
-  Future<List<Semester>> _loadSeedSemesters() =>
-      widget.semestersFuture ?? Future.value(const <Semester>[]);
+  @override
+  void dispose() {
+    final database = _ownedDatabase;
+    if (database != null) unawaited(database.close());
+    super.dispose();
+  }
 
   Future<List<Semester>> _loadSemesters() async {
-    final seedSemesters = await _loadSeedSemesters();
-    final imported = await _importedSemesterStore.loadSemesters();
-    final importedIds = {for (final semester in imported) semester.id};
-    final semesters = [
-      for (final semester in seedSemesters)
-        if (!importedIds.contains(semester.id)) semester,
-      ...imported,
-    ];
-    return Future.wait([
-      for (final semester in semesters)
-        _courseCustomizationStore.applyToSemester(semester),
-    ]);
+    return widget.semestersFuture ?? _repository.loadSemesters();
   }
 
   @override
@@ -125,11 +117,11 @@ class _SemesterBootstrapState extends State<_SemesterBootstrap> {
     return FutureBuilder<List<Semester>>(
       future: _semestersFuture,
       builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const _LoadingScreen();
-        }
         if (snapshot.hasError) {
           return _ErrorScreen(message: snapshot.error.toString());
+        }
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const _LoadingScreen();
         }
         final semesters = snapshot.data ?? const [];
         if (semesters.isEmpty) {
@@ -158,7 +150,7 @@ class _SemesterBootstrapState extends State<_SemesterBootstrap> {
         .push<CourseScheduleManagementResult>(
           MaterialPageRoute(
             builder: (context) => CourseScheduleManagementPage(
-              store: _importedSemesterStore,
+              repository: _repository,
               loadSemesters: _loadSemesters,
             ),
           ),
@@ -175,29 +167,22 @@ class _SemesterBootstrapState extends State<_SemesterBootstrap> {
   }
 
   Future<void> _saveCourseCustomization(
-    String semesterId,
+    int semesterId,
     CourseCustomization customization,
   ) async {
-    await _courseCustomizationStore.saveCustomization(
+    await _repository.saveCustomization(
       semesterId: semesterId,
       customization: customization,
     );
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
     setState(() {
       _semestersFuture = _loadSemesters();
     });
   }
 
-  Future<void> _saveManualCourse(String semesterId, Course course) async {
-    await _courseCustomizationStore.saveManualCourse(
-      semesterId: semesterId,
-      course: course,
-    );
-    if (!mounted) {
-      return;
-    }
+  Future<void> _saveManualCourse(int semesterId, Course course) async {
+    await _repository.saveManualCourse(semesterId: semesterId, course: course);
+    if (!mounted) return;
     setState(() {
       _semestersFuture = _loadSemesters();
     });
@@ -218,14 +203,14 @@ class ScheduleHome extends StatefulWidget {
   });
 
   final List<Semester> semesters;
-  final String? selectedSemesterId;
+  final int? selectedSemesterId;
   final VoidCallback? onManageRequested;
   final Future<void> Function(
-    String semesterId,
+    int semesterId,
     CourseCustomization customization,
   )?
   onCourseCustomizationSaved;
-  final Future<void> Function(String semesterId, Course course)?
+  final Future<void> Function(int semesterId, Course course)?
   onManualCourseSaved;
   final AppThemePreference themePreference;
   final ValueChanged<AppThemePreference> onThemePreferenceChanged;
@@ -331,7 +316,6 @@ class _ScheduleHomeState extends State<ScheduleHome> {
                   child: TimetableGrid(
                     compact: compact,
                     scheduled: scheduled,
-                    periods: _selectedSemester.periods,
                     selectedWeek: _selectedWeek,
                     weekDateRange: _selectedSemester.dateRangeForWeek(
                       _selectedWeek,
@@ -426,7 +410,7 @@ class _ScheduleHomeState extends State<ScheduleHome> {
     return null;
   }
 
-  Semester? _semesterForId(String? id) {
+  Semester? _semesterForId(int? id) {
     if (id == null) {
       return null;
     }
@@ -810,7 +794,7 @@ class _MobileSemesterPicker extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Expanded(
-              child: RadioGroup<String>(
+              child: RadioGroup<int>(
                 groupValue: selectedSemester.id,
                 onChanged: (id) {
                   if (id == null) {
@@ -825,7 +809,7 @@ class _MobileSemesterPicker extends StatelessWidget {
                   itemCount: semesters.length,
                   itemBuilder: (context, index) {
                     final semester = semesters[index];
-                    return RadioListTile<String>(
+                    return RadioListTile<int>(
                       value: semester.id,
                       title: Text(semester.displayName),
                     );
@@ -853,7 +837,7 @@ class _SemesterDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DropdownButtonFormField<String>(
+    return DropdownButtonFormField<int>(
       key: ValueKey(selectedSemester.id),
       initialValue: selectedSemester.id,
       isExpanded: true,
@@ -953,8 +937,8 @@ class _CourseDetailDialog extends StatelessWidget {
               if (course.isManual)
                 const _DetailRow(label: '课程来源', value: '手动添加')
               else ...[
-                _DetailRow(label: '课程号', value: course.courseCode),
-                _DetailRow(label: '课程序号', value: course.sequence),
+                _DetailRow(label: '课程号', value: course.courseCode ?? ''),
+                _DetailRow(label: '课程序号', value: course.sequence ?? ''),
               ],
               _DetailRow(label: '任课教师', value: course.teachers.join('、')),
               _DetailRow(label: '学分', value: course.credits),

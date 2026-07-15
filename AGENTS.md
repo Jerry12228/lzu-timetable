@@ -38,8 +38,9 @@ flutter pub outdated --no-transitive
 
 ## Repository Map
 
-- `lib/models/` owns typed schedule data, immutable keys, JSON-facing values, and date/week logic.
-- `lib/services/` owns HTML parsing, normalized JSON codecs, local stores, default period definitions, academic-page recognition, and course customization application.
+- `lib/models/` owns typed schedule data, immutable keys, hardcoded timetable sections, and date/week logic.
+- `lib/database/` owns the Drift schema, SQLite constraints, indexes, effective-version view, and cross-platform database opening.
+- `lib/services/` owns HTML parsing, hardcoded academic period mappings, academic-page recognition, the timetable repository, and course customization application.
 - `lib/app/` owns navigation, timetable rendering, management screens, import/edit flows, dialogs, Android conditional WebView integration, and shared UI widgets.
 - `android/` contains the Android platform shell, permissions, WebView/network compatibility settings, and launcher metadata.
 - `web/` contains the Flutter Web shell. Web must stay free of Android-only WebView imports.
@@ -54,18 +55,18 @@ The app uses a normalized data pipeline:
 
 1. A user provides source content through manual HTML paste/upload or Android academic import.
 2. Import services parse transient HTML into typed Dart models.
-3. Runtime period data comes from `DefaultPeriods`, not from user-imported period HTML.
-4. Schedules are persisted as normalized JSON, loaded from local storage, and migrated by the JSON codec when needed.
+3. Parser-only period mappings come from `AcademicPeriodMappings`; runtime section labels and start/end times come from `TimetableSections`.
+4. Parsed schedules are normalized into Drift/SQLite relation tables through `TimetableRepository` transactions.
 5. Local course customizations are applied after loading schedules.
 6. Shared timetable widgets render the resulting schedule for Web, mobile Web, and Android.
 
-Keep parsing and persistence independent from Flutter widgets. Widgets should call services and render model state; they should not scrape HTML, interpret teaching-system week text, or hand-build storage JSON.
+Keep parsing and persistence independent from Flutter widgets. Widgets should call services and render model state; they should not scrape HTML, interpret teaching-system week text, or issue ad hoc SQL.
 
 ## Data Invariants
 
-- Imported HTML is transient. Do not persist raw HTML for current records. It may exist only during an import/recognition flow or be read once when migrating older local records.
-- Persist schedule records as typed, JSON-serializable data. Add schema fields through the JSON codec/store layer, not ad hoc widget state.
-- `DefaultPeriods.all` is the runtime source of the 48 period definitions. Test fixtures may still verify that these definitions match the teaching-system period table.
+- Imported HTML is transient. Do not persist raw HTML; it may exist only during an import/recognition flow.
+- Persist schedule records through the typed Drift schema and `TimetableRepository`, not ad hoc widget state or JSON blobs.
+- `AcademicPeriodMappings.all` is the parser-only source of the 48 teaching-system mappings. `TimetableSections.all` is the runtime source of the 14 single-section labels and start/end times. Neither is persisted.
 - Individual section start/end times shown in the section column are inferred from single-section period definitions.
 - Teaching-system week expressions are expanded during import into numeric scheduled sessions. Do not store or expose editable week-rule text such as `1-17周全周`.
 - Editing a course section must present concrete weeks, weekday, period, and location. Users should not type week-rule strings.
@@ -103,7 +104,7 @@ Manual import:
 - Preview is optional. Users may preview first or confirm directly.
 - When previewing, render the same timetable grid used by the normal schedule view and allow week switching in the preview.
 - When confirming, validate required metadata, unique name, first Monday, `weekCount`, and parsed schedule data.
-- If editing existing schedule metadata without providing new HTML, keep the existing normalized JSON schedule data and update only requested metadata.
+- If editing existing schedule metadata without providing new HTML, keep the existing relational course data and update only requested metadata.
 
 Android academic import:
 
@@ -120,13 +121,13 @@ Web import:
 - Flutter Web must not attempt to read cross-origin SSO pages or embedded third-party DOM. Browser same-origin policy applies.
 - Web users should use manual paste/upload import unless a backend or browser extension is explicitly added in a future requirement.
 
-## Persistence and Migration
+## Persistence
 
-- Local storage uses `shared_preferences` stores and normalized JSON records.
-- Store code owns persistence keys, migration reads, migration writes, and duplicate-name checks.
-- Codec code owns JSON shape. Add tests for every new JSON field and for old-record migration.
-- Do not silently drop unknown user data during migrations. Preserve what the current model understands and fail loudly when a record cannot be safely interpreted.
-- Keep imported schedule data and local course customizations separate, then apply customizations after schedule load.
+- Schedule storage uses Drift/SQLite on Android and SQLite/WASM on Web. `shared_preferences` is only for lightweight preferences such as theme mode.
+- This schema intentionally starts fresh and does not read or migrate legacy schedule JSON. Do not add a compatibility reader or migration path unless a later requirement explicitly requests one.
+- `TimetableRepository` owns transactions, duplicate-name checks, aggregate CRUD, re-import matching, and effective model assembly.
+- Keep imported base data and local override versions separate. Re-import updates only base versions and preserves overrides matched by immutable `课程号 + 课程序号`.
+- Parser period mappings and runtime section definitions are hardcoded program data and must not be stored in the database.
 - Course deletion in the customization layer means the course disappears from details and grids. Deleting every section of a course leaves an untimed course unless the whole course is deleted.
 
 ## Testing Expectations
@@ -134,10 +135,10 @@ Web import:
 Use focused tests that match the risk of the change.
 
 - Parser tests should cover teaching-system table selection, full-page HTML, fixture course counts, teacher lists, missing locations, empty time data, and every supported original week expression.
-- Period tests should verify `DefaultPeriods.all` has 48 definitions and that important section labels map to the expected start/end times.
-- JSON tests should verify round trips, schema migration, no raw HTML persistence, `weekCount`, manual courses, imported course keys, and customization overlays.
+- Period tests should verify `AcademicPeriodMappings.all` has 48 parser mappings and that `TimetableSections.all` has the expected 14 labels and start/end times.
+- Repository tests should verify relational round trips, absence of raw HTML and period tables, `weekCount`, manual courses, imported course keys, re-import behavior, and customization overlays.
 - Date/week tests should cover first Monday boundaries, final Sunday boundaries, before/after clamping, overlap selection, and header-only today highlighting.
-- Store tests should cover save, restore, edit, delete, duplicate names, and migration writes.
+- Repository tests should cover save, restore, search, edit, delete, duplicate names, cascading deletes, and transaction rollback.
 - Import-flow widget tests should cover required metadata, duplicate names, optional preview, direct confirmation, auto-preview from academic recognition, and hidden HTML behavior.
 - Course editing tests should cover metadata edits, adding sections, deleting selected sections, deleting a course, and limits based on effective week count.
 - Shared timetable tests should cover desktop and narrow mobile layouts, week switching, empty-cell add, detail opening, course card name/location, grid-line suppression through cards, and overflow absence.
@@ -158,7 +159,7 @@ Use focused tests that match the risk of the change.
 - Keep edits scoped to the requested behavior. Avoid unrelated refactors while fixing product behavior.
 - Use structured parsers and typed models instead of string manipulation when the existing stack supports it.
 - Use `apply_patch` for manual file edits. Formatting commands and generated platform tooling may update files mechanically.
-- Add concise comments only when they clarify non-obvious behavior, such as Android compatibility settings or migration decisions.
+- Add concise comments only when they clarify non-obvious behavior, such as Android compatibility settings or re-import overlay decisions.
 - Keep UI text fitted at mobile sizes. Avoid overflow by changing layout constraints, density, or content hierarchy.
 - Preserve Web and Android behavior together unless a requirement explicitly allows a platform split.
 

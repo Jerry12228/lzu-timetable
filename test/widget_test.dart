@@ -1,22 +1,32 @@
 import 'dart:io';
 
+import 'package:drift/drift.dart' as drift;
+import 'package:drift/native.dart';
 import 'package:lzu_timetable/app/course_schedule_app.dart';
 import 'package:lzu_timetable/app/import_schedule_page.dart';
+import 'package:lzu_timetable/database/app_database.dart';
 import 'package:lzu_timetable/models/schedule_models.dart';
-import 'package:lzu_timetable/services/course_customization_store.dart';
-import 'package:lzu_timetable/services/imported_semester_store.dart';
 import 'package:lzu_timetable/services/semester_importer.dart';
+import 'package:lzu_timetable/services/timetable_repository.dart';
 import 'package:lzu_timetable/services/theme_preference_store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  drift.driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
   late final semester = _loadSampleSemester();
 
   testWidgets('starts without a bundled course schedule', (tester) async {
-    final store = await _emptyStore();
-    await tester.pumpWidget(CourseScheduleApp(importedSemesterStore: store));
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final repository = await _emptyRepository();
+    await tester.pumpWidget(
+      CourseScheduleApp(
+        repository: repository,
+        themePreferenceStore: ThemePreferenceStore(preferences: preferences),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('还没有课程表'), findsOneWidget);
@@ -31,7 +41,6 @@ void main() {
     await _pumpSchedule(
       tester,
       semester,
-      store: ImportedSemesterStore(preferences: preferences),
       themePreferenceStore: ThemePreferenceStore(preferences: preferences),
     );
 
@@ -87,7 +96,6 @@ void main() {
       tester,
       semester,
       size: const Size(390, 844),
-      store: ImportedSemesterStore(preferences: preferences),
       themePreferenceStore: ThemePreferenceStore(preferences: preferences),
     );
 
@@ -104,9 +112,7 @@ void main() {
     final emptyPreferences = await SharedPreferences.getInstance();
     await tester.pumpWidget(
       CourseScheduleApp(
-        importedSemesterStore: ImportedSemesterStore(
-          preferences: emptyPreferences,
-        ),
+        repository: await _emptyRepository(),
         themePreferenceStore: ThemePreferenceStore(
           preferences: emptyPreferences,
         ),
@@ -123,21 +129,22 @@ void main() {
   testWidgets('selects the current semester and highlights only today header', (
     tester,
   ) async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
     final earlier = semester.copyWith(
-      id: 'earlier',
+      id: 1,
       displayName: '较早课表',
       termStartDate: DateTime(2026, 1, 5),
     );
     final current = semester.copyWith(
-      id: 'current',
+      id: 2,
       displayName: '当前课表',
       termStartDate: DateTime(2026, 2, 23),
     );
-    final store = await _emptyStore();
     await tester.pumpWidget(
       CourseScheduleApp(
         semestersFuture: Future.value([earlier, current]),
-        importedSemesterStore: store,
+        themePreferenceStore: ThemePreferenceStore(preferences: preferences),
         currentDate: DateTime(2026, 4, 1),
       ),
     );
@@ -187,11 +194,11 @@ void main() {
     expect(find.text('星期一'), findsOneWidget);
     expect(find.text('02-23'), findsOneWidget);
     expect(find.text('03-01'), findsOneWidget);
-    expect(find.text('第1节'), findsOneWidget);
+    expect(find.text('1'), findsOneWidget);
     expect(find.text('08:30'), findsOneWidget);
     expect(find.text('09:15'), findsOneWidget);
-    expect(find.text('中午1'), findsOneWidget);
-    expect(find.text('第12节'), findsOneWidget);
+    expect(find.text('午1'), findsOneWidget);
+    expect(find.text('12'), findsOneWidget);
     expect(find.text('中国近现代史纲要'), findsOneWidget);
     expect(find.text('无固定时间'), findsNothing);
     expect(find.text('通信原理'), findsNothing);
@@ -208,7 +215,6 @@ void main() {
       tester,
       semester,
       currentDate: DateTime(2026, 2, 23),
-      store: ImportedSemesterStore(preferences: preferences),
       themePreferenceStore: ThemePreferenceStore(preferences: preferences),
     );
 
@@ -243,7 +249,7 @@ void main() {
     expect(find.text('星期一'), findsOneWidget);
     expect(find.text('星期日'), findsOneWidget);
     expect(find.text('02-23'), findsOneWidget);
-    expect(find.text('第1节'), findsOneWidget);
+    expect(find.text('1'), findsOneWidget);
     expect(find.text('08:30'), findsOneWidget);
     expect(find.text('09:15'), findsOneWidget);
     expect(find.text('天山堂A208'), findsOneWidget);
@@ -301,17 +307,8 @@ void main() {
   testWidgets('edits course metadata and refreshes the timetable', (
     tester,
   ) async {
-    SharedPreferences.setMockInitialValues({});
-    final preferences = await SharedPreferences.getInstance();
-    final customizationStore = CourseCustomizationStore(
-      preferences: preferences,
-    );
-    await _pumpSchedule(
-      tester,
-      semester,
-      store: ImportedSemesterStore(preferences: preferences),
-      customizationStore: customizationStore,
-    );
+    final repository = await _emptyRepository();
+    await _pumpSchedule(tester, semester, repository: repository);
 
     await tester.tap(find.text('中国近现代史纲要').first);
     await tester.pumpAndSettle();
@@ -328,7 +325,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('编辑后的课程'), findsOneWidget);
-    final applied = await customizationStore.applyToSemester(semester);
+    final applied = (await repository.loadSemesters()).single;
     expect(
       applied.courses
           .firstWhere((course) => course.courseCode == '1309061')
@@ -340,17 +337,8 @@ void main() {
   testWidgets('adds a course from an empty timetable cell across weeks', (
     tester,
   ) async {
-    SharedPreferences.setMockInitialValues({});
-    final preferences = await SharedPreferences.getInstance();
-    final customizationStore = CourseCustomizationStore(
-      preferences: preferences,
-    );
-    await _pumpSchedule(
-      tester,
-      semester,
-      store: ImportedSemesterStore(preferences: preferences),
-      customizationStore: customizationStore,
-    );
+    final repository = await _emptyRepository();
+    await _pumpSchedule(tester, semester, repository: repository);
 
     await tester.tap(find.byKey(const ValueKey('empty-cell-7-第1节')));
     await tester.pumpAndSettle();
@@ -365,8 +353,20 @@ void main() {
       findsNothing,
     );
     expect(find.byKey(const ValueKey('quick-add-section-第1节')), findsOneWidget);
-    expect(find.text('1'), findsOneWidget);
-    expect(find.text('午1'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('quick-add-section-第1节')),
+        matching: find.text('1'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('quick-add-section-中午1节')),
+        matching: find.text('午1'),
+      ),
+      findsOneWidget,
+    );
     await tester.tap(find.byKey(const ValueKey('quick-add-weeks-button')));
     await tester.pumpAndSettle();
     expect(find.text('选择周次'), findsOneWidget);
@@ -391,7 +391,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('手动新增课程'), findsOneWidget);
-    final applied = await customizationStore.applyToSemester(semester);
+    final applied = (await repository.loadSemesters()).single;
     final course = applied.courses.firstWhere(
       (course) => course.name == '手动新增课程',
     );
@@ -409,20 +409,11 @@ void main() {
   testWidgets('selects one week session and removes selected sessions', (
     tester,
   ) async {
-    SharedPreferences.setMockInitialValues({});
-    final preferences = await SharedPreferences.getInstance();
-    final customizationStore = CourseCustomizationStore(
-      preferences: preferences,
-    );
+    final repository = await _emptyRepository();
     final source = semester.courses.firstWhere(
       (course) => course.name == '中国近现代史纲要',
     );
-    await _pumpSchedule(
-      tester,
-      semester,
-      store: ImportedSemesterStore(preferences: preferences),
-      customizationStore: customizationStore,
-    );
+    await _pumpSchedule(tester, semester, repository: repository);
 
     await tester.tap(find.text(source.name).first);
     await tester.pumpAndSettle();
@@ -467,7 +458,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('save-course-button')));
     await tester.pumpAndSettle();
 
-    final applied = await customizationStore.applyToSemester(semester);
+    final applied = (await repository.loadSemesters()).single;
     final updated = applied.courses.firstWhere(
       (course) =>
           course.courseCode == source.courseCode &&
@@ -477,20 +468,11 @@ void main() {
   });
 
   testWidgets('confirms before deleting an entire course', (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    final preferences = await SharedPreferences.getInstance();
-    final customizationStore = CourseCustomizationStore(
-      preferences: preferences,
-    );
+    final repository = await _emptyRepository();
     final source = semester.courses.firstWhere(
       (course) => course.name == '中国近现代史纲要',
     );
-    await _pumpSchedule(
-      tester,
-      semester,
-      store: ImportedSemesterStore(preferences: preferences),
-      customizationStore: customizationStore,
-    );
+    await _pumpSchedule(tester, semester, repository: repository);
 
     await tester.tap(find.text(source.name).first);
     await tester.pumpAndSettle();
@@ -507,7 +489,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, '删除'));
     await tester.pumpAndSettle();
 
-    final applied = await customizationStore.applyToSemester(semester);
+    final applied = (await repository.loadSemesters()).single;
     expect(
       applied.courses.map((course) => course.courseCode),
       isNot(contains(source.courseCode)),
@@ -603,7 +585,7 @@ void main() {
     expect(find.text('预览周次'), findsOneWidget);
     expect(find.text('节次'), findsOneWidget);
     expect(find.text('星期一'), findsOneWidget);
-    expect(find.text('第1节'), findsOneWidget);
+    expect(find.text('1'), findsOneWidget);
     expect(find.text('中国近现代史纲要'), findsOneWidget);
     expect(
       tester
@@ -634,26 +616,31 @@ void main() {
   testWidgets('confirms a valid imported schedule without previewing first', (
     tester,
   ) async {
-    final store = await _emptyStore();
-    await _pumpSchedule(tester, semester, store: store);
+    final repository = await _emptyRepository();
+    await _pumpSchedule(tester, semester, repository: repository);
     await _openScheduleEditor(tester);
     await _enterValidImportForm(tester, '直接添加课表');
 
     await tester.tap(find.byKey(const ValueKey('confirm-import-button')));
     await tester.pumpAndSettle();
 
-    expect((await store.loadRecords()).single.displayName, '直接添加课表');
+    expect(
+      (await repository.loadSemesters())
+          .singleWhere((item) => item.displayName == '直接添加课表')
+          .displayName,
+      '直接添加课表',
+    );
   });
 
   testWidgets('auto previews academic recognition without showing html', (
     tester,
   ) async {
-    final store = await _emptyStore();
+    final repository = await _emptyRepository();
     await tester.pumpWidget(
       MaterialApp(
         home: ImportSchedulePage(
           existingDisplayNames: const [],
-          store: store,
+          repository: repository,
           initialDisplayName: '识别课表',
           initialCourseHtml: File(
             'assets/raw/2025-2026-2-courses.html',
@@ -723,8 +710,8 @@ void main() {
   });
 
   testWidgets('confirms preview and selects imported schedule', (tester) async {
-    final store = await _emptyStore();
-    await _pumpSchedule(tester, semester, store: store);
+    final repository = await _emptyRepository();
+    await _pumpSchedule(tester, semester, repository: repository);
     await _openScheduleEditor(tester);
     await _enterValidImportForm(tester, '导入课表');
 
@@ -735,7 +722,12 @@ void main() {
 
     expect(find.text('导入课表'), findsOneWidget);
     expect(find.text('2026-02-23起 · 19 门课程'), findsWidgets);
-    expect((await store.loadRecords()).single.displayName, '导入课表');
+    expect(
+      (await repository.loadSemesters()).where(
+        (item) => item.displayName == '导入课表',
+      ),
+      hasLength(1),
+    );
 
     await tester.tap(find.byTooltip('返回课程表'));
     await tester.pumpAndSettle();
@@ -747,15 +739,15 @@ void main() {
   testWidgets('edits an imported schedule in the management page', (
     tester,
   ) async {
-    final store = await _emptyStore();
-    final record = await store.addRecord(
+    final repository = await _emptyRepository();
+    final recordId = await repository.saveSchedule(
       semester: _loadSampleSemester(displayName: '待修改课表'),
-      existingDisplayNames: const ['2025-2026-2学期'],
+      replaceImportedCourses: true,
     );
-    await _pumpSchedule(tester, semester, store: store);
+    await _pumpSchedule(tester, semester, repository: repository);
     await _openManagementPage(tester);
 
-    await tester.tap(find.byKey(ValueKey('edit-schedule-${record.id}')));
+    await tester.tap(find.byKey(ValueKey('edit-schedule-$recordId')));
     await tester.pumpAndSettle();
 
     expect(find.text('修改课程表'), findsOneWidget);
@@ -775,26 +767,26 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('confirm-import-button')));
     await tester.pumpAndSettle();
 
-    final records = await store.loadRecords();
-    expect(records, hasLength(1));
-    expect(records.single.id, record.id);
-    expect(records.single.displayName, '已修改课表');
+    final updated = (await repository.loadSemesters()).singleWhere(
+      (item) => item.id == recordId,
+    );
+    expect(updated.displayName, '已修改课表');
     expect(find.text('已修改课表'), findsOneWidget);
   });
 
   testWidgets('allows reducing extended weeks down to the final course week', (
     tester,
   ) async {
-    final store = await _emptyStore();
-    final record = await store.addRecord(
+    final repository = await _emptyRepository();
+    final recordId = await repository.saveSchedule(
       semester: _loadSampleSemester(
         displayName: '扩展课表',
       ).copyWith(weekCount: 20),
-      existingDisplayNames: const ['2025-2026-2学期'],
+      replaceImportedCourses: true,
     );
-    await _pumpSchedule(tester, semester, store: store);
+    await _pumpSchedule(tester, semester, repository: repository);
     await _openManagementPage(tester);
-    await tester.tap(find.byKey(ValueKey('edit-schedule-${record.id}')));
+    await tester.tap(find.byKey(ValueKey('edit-schedule-$recordId')));
     await tester.pumpAndSettle();
 
     final weekCountField = find.byKey(
@@ -807,48 +799,48 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('confirm-import-button')));
     await tester.pumpAndSettle();
 
-    expect((await store.loadRecords()).single.semester.weekCount, 17);
+    expect((await repository.loadSemester(recordId))!.weekCount, 17);
   });
 
   testWidgets('deletes an imported schedule in the management page', (
     tester,
   ) async {
-    final store = await _emptyStore();
-    final record = await store.addRecord(
+    final repository = await _emptyRepository();
+    final recordId = await repository.saveSchedule(
       semester: _loadSampleSemester(displayName: '待删除课表'),
-      existingDisplayNames: const ['2025-2026-2学期'],
+      replaceImportedCourses: true,
     );
-    await _pumpSchedule(tester, semester, store: store);
+    await _pumpSchedule(tester, semester, repository: repository);
     await _openManagementPage(tester);
 
-    await tester.tap(find.byKey(ValueKey('delete-schedule-${record.id}')));
+    await tester.tap(find.byKey(ValueKey('delete-schedule-$recordId')));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '删除'));
     await tester.pumpAndSettle();
 
-    expect(await store.loadRecords(), isEmpty);
+    expect(await repository.loadSemester(recordId), isNull);
     expect(find.text('待删除课表'), findsNothing);
   });
 }
 
 Semester _loadSampleSemester({
-  String semesterId = '2025-2026-2',
+  int semesterId = 0,
   String displayName = '2025-2026-2学期',
   DateTime? termStartDate,
 }) {
-  return SemesterImporter.parseCourseHtml(
+  final parsed = SemesterImporter.parseCourseHtml(
     semesterId: semesterId,
     displayName: displayName,
     termStartDate: termStartDate ?? DateTime(2026, 2, 23),
     courseHtml: File('assets/raw/2025-2026-2-courses.html').readAsStringSync(),
   );
+  return parsed.copyWith(weekCount: parsed.lastScheduledWeek);
 }
 
-Future<void> _pumpSchedule(
+Future<TimetableRepository> _pumpSchedule(
   WidgetTester tester,
   Semester semester, {
-  ImportedSemesterStore? store,
-  CourseCustomizationStore? customizationStore,
+  TimetableRepository? repository,
   ThemePreferenceStore? themePreferenceStore,
   Size size = const Size(1280, 900),
   DateTime? currentDate,
@@ -859,18 +851,30 @@ Future<void> _pumpSchedule(
     tester.view.resetPhysicalSize();
     tester.view.resetDevicePixelRatio();
   });
-  final importedStore = store ?? await _emptyStore();
+  final targetRepository = repository ?? await _emptyRepository();
+  if (themePreferenceStore == null) {
+    SharedPreferences.setMockInitialValues({});
+    themePreferenceStore = ThemePreferenceStore(
+      preferences: await SharedPreferences.getInstance(),
+    );
+  }
+  final existing = await targetRepository.loadSemesters();
+  if (!existing.any((item) => item.displayName == semester.displayName)) {
+    await targetRepository.saveSchedule(
+      semester: semester,
+      replaceImportedCourses: true,
+    );
+  }
   await tester.pumpWidget(
     CourseScheduleApp(
       key: ValueKey((currentDate ?? DateTime(2026, 2, 23)).toIso8601String()),
-      semestersFuture: Future.value([semester]),
-      importedSemesterStore: importedStore,
-      courseCustomizationStore: customizationStore,
+      repository: targetRepository,
       themePreferenceStore: themePreferenceStore,
       currentDate: currentDate ?? DateTime(2026, 2, 23),
     ),
   );
   await tester.pumpAndSettle();
+  return targetRepository;
 }
 
 Future<void> _enterValidImportForm(
@@ -913,10 +917,10 @@ Future<void> _openScheduleEditor(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-Future<ImportedSemesterStore> _emptyStore() async {
-  SharedPreferences.setMockInitialValues({});
-  final preferences = await SharedPreferences.getInstance();
-  return ImportedSemesterStore(preferences: preferences);
+Future<TimetableRepository> _emptyRepository() async {
+  final database = AppDatabase(NativeDatabase.memory());
+  addTearDown(database.close);
+  return TimetableRepository(database);
 }
 
 Color? _headerBackgroundColor(WidgetTester tester, int weekday) {

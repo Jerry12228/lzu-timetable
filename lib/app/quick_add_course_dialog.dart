@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/schedule_models.dart';
+import '../models/timetable_sections.dart';
 import 'section_button_grid.dart';
 
 class QuickAddCourseDialog extends StatefulWidget {
@@ -98,7 +99,6 @@ class _QuickAddCourseDialogState extends State<QuickAddCourseDialog> {
               const Text('上课节次', style: TextStyle(fontWeight: FontWeight.w800)),
               const SizedBox(height: 8),
               SectionButtonGrid(
-                periods: _singleSectionPeriods,
                 selectedSections: _sections,
                 keyPrefix: 'quick-add-section',
                 onToggle: _toggleSection,
@@ -136,14 +136,6 @@ class _QuickAddCourseDialogState extends State<QuickAddCourseDialog> {
       ],
     );
   }
-
-  List<PeriodDefinition> get _singleSectionPeriods => [
-    for (final section in timetableSectionOrder)
-      widget.semester.periods.firstWhere(
-        (period) =>
-            period.sections.length == 1 && period.sections.single == section,
-      ),
-  ];
 
   Future<void> _chooseWeeks() async {
     final selectedWeeks = await showDialog<Set<int>>(
@@ -223,15 +215,15 @@ class _QuickAddCourseDialogState extends State<QuickAddCourseDialog> {
   }
 
   Course _buildCourse(String name) {
-    final code =
-        '$manualCourseCodePrefix${DateTime.now().microsecondsSinceEpoch}';
     final sortedWeeks = _weeks.toList()..sort();
-    final selectedPeriods = _selectedSectionPeriods;
-    final firstPeriod = selectedPeriods.first;
-    final lastPeriod = selectedPeriods.last;
+    final selectedOrders = [
+      for (final section in TimetableSections.all)
+        if (_sections.contains(section.id)) section.order,
+    ];
     return Course(
-      courseCode: code,
-      sequence: 'local',
+      origin: CourseOrigin.manual,
+      courseCode: null,
+      sequence: null,
       name: name,
       teachers: const [],
       credits: '',
@@ -248,23 +240,13 @@ class _QuickAddCourseDialogState extends State<QuickAddCourseDialog> {
           CourseSession(
             week: week,
             weekday: _weekday,
-            weekdayText: weekdays[_weekday - 1],
-            periodName: _periodName(selectedPeriods),
-            startTime: firstPeriod.startTime,
-            endTime: lastPeriod.endTime,
-            sections: [
-              for (final period in selectedPeriods) period.sections.single,
-            ],
+            startSection: selectedOrders.first,
+            endSection: selectedOrders.last,
             location: _locationController.text.trim(),
           ),
       ],
     );
   }
-
-  List<PeriodDefinition> get _selectedSectionPeriods => [
-    for (final period in _singleSectionPeriods)
-      if (_sections.contains(period.sections.single)) period,
-  ];
 
   bool get _hasContinuousSections {
     final indexes = [
@@ -338,13 +320,6 @@ class _WeekSelectionDialogState extends State<_WeekSelectionDialog> {
       ],
     );
   }
-}
-
-String _periodName(List<PeriodDefinition> periods) {
-  if (periods.length == 1) {
-    return periods.single.name;
-  }
-  return '${periods.first.sections.single}至${periods.last.sections.single}';
 }
 
 String _formatMonthDay(DateTime date) {

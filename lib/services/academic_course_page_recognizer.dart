@@ -74,7 +74,7 @@ class AcademicCoursePageRecognizer {
   ) {
     final metadata = extractMetadata(capture);
     final semester = SemesterImporter.parseCourseHtml(
-      semesterId: 'recognition',
+      semesterId: 0,
       displayName: metadata.displayName,
       termStartDate: null,
       courseHtml: capture.html,
