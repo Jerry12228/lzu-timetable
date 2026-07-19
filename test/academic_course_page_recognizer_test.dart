@@ -20,6 +20,8 @@ void main() {
 
     expect(metadata.year, '2002');
     expect(metadata.term, '秋');
+    expect(metadata.yearId, '22');
+    expect(metadata.termId, '2');
     expect(metadata.displayName, '2002秋课程表');
   });
 
@@ -32,10 +34,14 @@ void main() {
           html: legacyPageHtml,
           selectedYear: '2026',
           selectedTerm: '春',
+          selectedYearId: '46',
+          selectedTermId: '1',
         ),
       );
 
       expect(metadata.displayName, '2026春课程表');
+      expect(metadata.yearId, '46');
+      expect(metadata.termId, '1');
     },
   );
 

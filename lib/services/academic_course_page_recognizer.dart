@@ -8,19 +8,30 @@ class AcademicCoursePageCapture {
     required this.html,
     this.selectedYear,
     this.selectedTerm,
+    this.selectedYearId,
+    this.selectedTermId,
   });
 
   final String pageUrl;
   final String html;
   final String? selectedYear;
   final String? selectedTerm;
+  final String? selectedYearId;
+  final String? selectedTermId;
 }
 
 class AcademicSemesterMetadata {
-  const AcademicSemesterMetadata({required this.year, required this.term});
+  const AcademicSemesterMetadata({
+    required this.year,
+    required this.term,
+    this.yearId,
+    this.termId,
+  });
 
   final String year;
   final String term;
+  final String? yearId;
+  final String? termId;
 
   String get displayName => '$year$term课程表';
 }
@@ -30,11 +41,15 @@ class RecognizedAcademicCoursePage {
     required this.displayName,
     required this.courseHtml,
     required this.courseCount,
+    this.firstWeekMonday,
+    this.firstWeekMondayLookupNotice,
   });
 
   final String displayName;
   final String courseHtml;
   final int courseCount;
+  final DateTime? firstWeekMonday;
+  final String? firstWeekMondayLookupNotice;
 }
 
 class AcademicCoursePageRecognizer {
@@ -66,12 +81,29 @@ class AcademicCoursePageRecognizer {
     if (year == null || term == null) {
       throw const FormatException('无法识别当前页面的学年或学期');
     }
-    return AcademicSemesterMetadata(year: year, term: term);
+    return AcademicSemesterMetadata(
+      year: year,
+      term: term,
+      yearId: _firstNonEmpty(
+        capture.selectedYearId,
+        document
+            .querySelector('select[name="year"] option[selected]')
+            ?.attributes['value'],
+      ),
+      termId: _firstNonEmpty(
+        capture.selectedTermId,
+        document
+            .querySelector('select[name="term"] option[selected]')
+            ?.attributes['value'],
+      ),
+    );
   }
 
   static RecognizedAcademicCoursePage recognize(
-    AcademicCoursePageCapture capture,
-  ) {
+    AcademicCoursePageCapture capture, {
+    DateTime? firstWeekMonday,
+    String? firstWeekMondayLookupNotice,
+  }) {
     final metadata = extractMetadata(capture);
     final semester = SemesterImporter.parseCourseHtml(
       semesterId: 0,
@@ -83,6 +115,8 @@ class AcademicCoursePageRecognizer {
       displayName: metadata.displayName,
       courseHtml: capture.html,
       courseCount: semester.courses.length,
+      firstWeekMonday: firstWeekMonday,
+      firstWeekMondayLookupNotice: firstWeekMondayLookupNotice,
     );
   }
 
