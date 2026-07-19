@@ -194,9 +194,11 @@ class _CourseScheduleManagementPageState
           repository: widget.repository,
           editingSemesterId: recognized == null ? semester?.id : null,
           initialDisplayName: recognized?.displayName ?? semester?.displayName,
-          initialTermStartDate: semester?.termStartDate,
+          initialTermStartDate:
+              recognized?.firstWeekMonday ?? semester?.termStartDate,
           initialSemester: recognized == null ? semester : null,
           initialCourseHtml: recognized?.courseHtml,
+          initialNotice: recognized?.firstWeekMondayLookupNotice,
           hideCourseHtml: recognized != null,
           autoPreview: recognized != null,
         ),
@@ -356,7 +358,7 @@ class _EmptyManagementState extends StatelessWidget {
 
 String _formatDate(DateTime? date) {
   if (date == null) {
-    return '未设置第一周日期';
+    return '未设置开学日期';
   }
   final month = date.month.toString().padLeft(2, '0');
   final day = date.day.toString().padLeft(2, '0');

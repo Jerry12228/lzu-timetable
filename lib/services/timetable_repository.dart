@@ -174,7 +174,7 @@ class TimetableRepository {
     final firstMonday = semester.termStartDate;
     if (name.isEmpty) throw const FormatException('请输入课表名称');
     if (firstMonday == null || firstMonday.weekday != DateTime.monday) {
-      throw const FormatException('请输入有效的第一周星期一日期');
+      throw const FormatException('请输入有效的开学日期');
     }
     if (semester.weekCount < semester.lastScheduledWeek) {
       throw FormatException('学期总周数不得小于第${semester.lastScheduledWeek}周');

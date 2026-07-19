@@ -632,7 +632,7 @@ void main() {
     );
   });
 
-  testWidgets('auto previews academic recognition without showing html', (
+  testWidgets('auto previews academic recognition with its resolved Monday', (
     tester,
   ) async {
     final repository = await _emptyRepository();
@@ -642,6 +642,7 @@ void main() {
           existingDisplayNames: const [],
           repository: repository,
           initialDisplayName: '识别课表',
+          initialTermStartDate: DateTime(2026, 2, 23),
           initialCourseHtml: File(
             'assets/raw/2025-2026-2-courses.html',
           ).readAsStringSync(),
@@ -656,6 +657,42 @@ void main() {
     expect(find.text('预览结果'), findsOneWidget);
     expect(find.text('中国近现代史纲要'), findsOneWidget);
     expect(find.byKey(const ValueKey('import-date-field')), findsOneWidget);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const ValueKey('import-date-field')))
+          .controller!
+          .text,
+      '2026-02-23',
+    );
+    expect(find.text('02-23'), findsWidgets);
+  });
+
+  testWidgets('calendar lookup notice still requires a first-week Monday', (
+    tester,
+  ) async {
+    final repository = await _emptyRepository();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ImportSchedulePage(
+          existingDisplayNames: const [],
+          repository: repository,
+          initialDisplayName: '识别课表',
+          initialNotice: '未能自动获取开学日期，请在下一页手动填写。',
+          initialCourseHtml: File(
+            'assets/raw/2025-2026-2-courses.html',
+          ).readAsStringSync(),
+          hideCourseHtml: true,
+          autoPreview: true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('未能自动获取开学日期，请在下一页手动填写。'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('confirm-import-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('请输入有效的开学日期，例如 2026-02-23'), findsOneWidget);
   });
 
   testWidgets('recognizes and validates the configurable semester week count', (
