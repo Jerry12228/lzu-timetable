@@ -90,6 +90,9 @@ Keep parsing and persistence independent from Flutter widgets. Widgets should ca
 - Course cards must show the course name and location when a location exists.
 - Grid lines must remain visible for empty cells and table structure, but lines crossing through course cards should be visually suppressed only where they intersect course cards.
 - Course detail dialogs expose an edit entry. Course editing uses a full page, not a cramped inline editor.
+- Home and import preview use the shared single-row `WeekSelector` buttons. Overflow scrolls horizontally with touch, mouse dragging, or trackpad; scrolling does not change the selected week. Keep the selected week visible on initial display, semester changes, week-count changes, and viewport resizing without resetting ordinary user scrolling.
+- Course session editing supports optional locations, including clearing them. Selected session rows can have locations edited in bulk without changing their weeks, weekdays, or sections. These changes remain editor drafts until the user saves the course.
+- The location field in course information edits all sessions of the current course. Mixed locations display `-` as a hint only; leaving the field untouched must preserve individual locations. Keep this summary synchronized after individual, selected-session, add, and delete edits, and preserve the order of user edits rather than reapplying a stale course-wide value on save.
 - Clicking an empty timetable cell can add a course with that week, weekday, and period preselected. Only time placement and name are mandatory for a minimal manual course.
 - Week selection for course editing should use a dedicated picker/sub-dialog when it would otherwise consume too much page space.
 - Period selection should use compact period buttons, not a long dropdown. Selected period buttons are highlighted; do not add redundant checkmarks.

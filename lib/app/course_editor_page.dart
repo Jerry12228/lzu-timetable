@@ -21,6 +21,7 @@ class CourseEditorPage extends StatefulWidget {
 class _CourseEditorPageState extends State<CourseEditorPage> {
   final _nameController = TextEditingController();
   final _teachersController = TextEditingController();
+  final _courseLocationController = TextEditingController();
   final _creditsController = TextEditingController();
   final _selectionTypeController = TextEditingController();
   final _assessmentController = TextEditingController();
@@ -43,12 +44,14 @@ class _CourseEditorPageState extends State<CourseEditorPage> {
     _deferredExamController.text = course.deferredExam;
     _materialController.text = course.material;
     _sessions = [...course.sessions];
+    _syncCourseLocation();
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _teachersController.dispose();
+    _courseLocationController.dispose();
     _creditsController.dispose();
     _selectionTypeController.dispose();
     _assessmentController.dispose();
@@ -101,6 +104,33 @@ class _CourseEditorPageState extends State<CourseEditorPage> {
               decoration: const InputDecoration(
                 labelText: '任课教师',
                 border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const ValueKey('course-location-field'),
+              controller: _courseLocationController,
+              enabled: _sessions.isNotEmpty,
+              onChanged: _updateAllLocations,
+              decoration: InputDecoration(
+                labelText: '上课地点（可选）',
+                hintText: _hasMixedLocations ? '-' : null,
+                helperText: _sessions.isEmpty
+                    ? '暂无上课安排，请先新增节次'
+                    : '修改后应用于所有上课安排',
+                helperMaxLines: 2,
+                border: const OutlineInputBorder(),
+                suffixIcon:
+                    _sessions.any((session) => session.location.isNotEmpty)
+                    ? IconButton(
+                        tooltip: '清空所有地点',
+                        onPressed: () {
+                          _courseLocationController.clear();
+                          _updateAllLocations('');
+                        },
+                        icon: const Icon(Icons.clear),
+                      )
+                    : null,
               ),
             ),
             const SizedBox(height: 12),
@@ -158,13 +188,6 @@ class _CourseEditorPageState extends State<CourseEditorPage> {
             Row(
               children: [
                 const Expanded(child: _EditorHeading('上课节次')),
-                if (_selectedSessionIndexes.isNotEmpty)
-                  IconButton(
-                    key: const ValueKey('delete-selected-sessions-button'),
-                    tooltip: '删除所选节次',
-                    onPressed: _requestDeleteSelectedSessions,
-                    icon: const Icon(Icons.delete_outline),
-                  ),
                 IconButton(
                   key: const ValueKey('add-session-button'),
                   tooltip: '新增节次',
@@ -173,6 +196,26 @@ class _CourseEditorPageState extends State<CourseEditorPage> {
                 ),
               ],
             ),
+            if (_selectedSessionIndexes.isNotEmpty)
+              Wrap(
+                spacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text('已选 ${_selectedSessionIndexes.length} 项'),
+                  TextButton.icon(
+                    key: const ValueKey('edit-selected-locations-button'),
+                    onPressed: _editSelectedLocations,
+                    icon: const Icon(Icons.edit_location_alt_outlined),
+                    label: const Text('修改地点'),
+                  ),
+                  IconButton(
+                    key: const ValueKey('delete-selected-sessions-button'),
+                    tooltip: '删除所选节次',
+                    onPressed: _requestDeleteSelectedSessions,
+                    icon: const Icon(Icons.delete_outline),
+                  ),
+                ],
+              ),
             const SizedBox(height: 4),
             if (_sessions.isEmpty)
               const Padding(
@@ -182,6 +225,7 @@ class _CourseEditorPageState extends State<CourseEditorPage> {
             else
               for (var index = 0; index < _sessions.length; index++)
                 _SessionEditorRow(
+                  key: ValueKey('session-row-$index'),
                   session: _sessions[index],
                   selected: _selectedSessionIndexes.contains(index),
                   onSelected: (selected) {
@@ -213,6 +257,25 @@ class _CourseEditorPageState extends State<CourseEditorPage> {
     );
   }
 
+  bool get _hasMixedLocations =>
+      _sessions.map((session) => session.location).toSet().length > 1;
+
+  void _syncCourseLocation() {
+    // A mixed location is a hint, never a value written back to the sessions.
+    _courseLocationController.text = _sessions.isEmpty || _hasMixedLocations
+        ? ''
+        : _sessions.first.location;
+  }
+
+  void _updateAllLocations(String value) {
+    final location = value.trim();
+    setState(() {
+      _sessions = [
+        for (final session in _sessions) session.copyWith(location: location),
+      ];
+    });
+  }
+
   Future<void> _editSession({int? index}) async {
     final updated = await showDialog<CourseSession>(
       context: context,
@@ -231,6 +294,7 @@ class _CourseEditorPageState extends State<CourseEditorPage> {
         _sessions[index] = updated;
       }
       _selectedSessionIndexes.clear();
+      _syncCourseLocation();
     });
   }
 
@@ -248,6 +312,26 @@ class _CourseEditorPageState extends State<CourseEditorPage> {
           if (!_selectedSessionIndexes.contains(index)) _sessions[index],
       ];
       _selectedSessionIndexes.clear();
+      _syncCourseLocation();
+    });
+  }
+
+  Future<void> _editSelectedLocations() async {
+    final selected = {..._selectedSessionIndexes};
+    final location = await showDialog<String>(
+      context: context,
+      builder: (context) => _BulkLocationDialog(
+        selectedCount: selected.length,
+        locations: {for (final index in selected) _sessions[index].location},
+      ),
+    );
+    if (location == null || !mounted) return;
+    setState(() {
+      for (final index in selected) {
+        _sessions[index] = _sessions[index].copyWith(location: location);
+      }
+      _selectedSessionIndexes.clear();
+      _syncCourseLocation();
     });
   }
 
@@ -356,6 +440,7 @@ class _ReadonlyRow extends StatelessWidget {
 
 class _SessionEditorRow extends StatelessWidget {
   const _SessionEditorRow({
+    super.key,
     required this.session,
     required this.selected,
     required this.onSelected,
@@ -411,6 +496,7 @@ class _CourseSessionEditorDialog extends StatefulWidget {
 
 class _CourseSessionEditorDialogState
     extends State<_CourseSessionEditorDialog> {
+  final _locationController = TextEditingController();
   late int _week;
   late int _weekday;
   late Set<String> _sections;
@@ -420,12 +506,19 @@ class _CourseSessionEditorDialogState
   void initState() {
     super.initState();
     final session = widget.initialSession;
+    _locationController.text = session?.location ?? '';
     _week = session?.week ?? 1;
     _weekday = session?.weekday ?? 1;
     _sections = {
       ...(session?.sections ?? const []),
       if (session == null) TimetableSections.all.first.id,
     };
+  }
+
+  @override
+  void dispose() {
+    _locationController.dispose();
+    super.dispose();
   }
 
   @override
@@ -484,6 +577,15 @@ class _CourseSessionEditorDialogState
                 keyPrefix: 'session-section',
                 onToggle: _toggleSection,
               ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const ValueKey('session-location-field'),
+                controller: _locationController,
+                decoration: const InputDecoration(
+                  labelText: '上课地点（可选）',
+                  border: OutlineInputBorder(),
+                ),
+              ),
               if (_errorMessage != null) ...[
                 const SizedBox(height: 10),
                 Text(
@@ -523,7 +625,7 @@ class _CourseSessionEditorDialogState
       weekday: _weekday,
       startSection: selectedOrders.first,
       endSection: selectedOrders.last,
-      location: widget.initialSession?.location ?? '',
+      location: _locationController.text.trim(),
     );
     Navigator.of(context).pop(session);
   }
@@ -546,6 +648,75 @@ class _CourseSessionEditorDialogState
       }
       _errorMessage = null;
     });
+  }
+}
+
+class _BulkLocationDialog extends StatefulWidget {
+  const _BulkLocationDialog({
+    required this.selectedCount,
+    required this.locations,
+  });
+
+  final int selectedCount;
+  final Set<String> locations;
+
+  @override
+  State<_BulkLocationDialog> createState() => _BulkLocationDialogState();
+}
+
+class _BulkLocationDialogState extends State<_BulkLocationDialog> {
+  late final _controller = TextEditingController(
+    text: widget.locations.length == 1 ? widget.locations.single : '',
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('批量修改地点'),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('已选 ${widget.selectedCount} 条上课安排'),
+              if (widget.locations.length > 1) ...[
+                const SizedBox(height: 8),
+                const Text('所选安排存在不同地点，保存后将统一修改。'),
+              ],
+              const SizedBox(height: 12),
+              TextField(
+                key: const ValueKey('bulk-location-field'),
+                controller: _controller,
+                decoration: const InputDecoration(
+                  labelText: '上课地点（可选）',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text('留空将清除所选安排的地点'),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_controller.text.trim()),
+          child: const Text('保存'),
+        ),
+      ],
+    );
   }
 }
 

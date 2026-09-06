@@ -7,6 +7,7 @@ import '../models/schedule_models.dart';
 import '../services/semester_importer.dart';
 import '../services/timetable_repository.dart';
 import 'timetable_grid.dart';
+import 'week_selector.dart';
 
 class ImportSchedulePage extends StatefulWidget {
   const ImportSchedulePage({
@@ -488,27 +489,13 @@ class _PreviewCardState extends State<_PreviewCard> {
           _PreviewLine(label: '课程总数', value: '${semester.courses.length} 门'),
           _PreviewLine(label: '最大周次', value: '第 ${semester.maxWeek} 周'),
           const SizedBox(height: 8),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 260),
-            child: DropdownButtonFormField<int>(
-              key: const ValueKey('preview-week-dropdown'),
-              initialValue: _selectedWeek,
-              decoration: const InputDecoration(
-                labelText: '预览周次',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              items: [
-                for (var week = 1; week <= semester.maxWeek; week++)
-                  DropdownMenuItem(value: week, child: Text('第$week周')),
-              ],
-              onChanged: (value) {
-                if (value == null) {
-                  return;
-                }
-                setState(() => _selectedWeek = value);
-              },
-            ),
+          const Text('预览周次'),
+          const SizedBox(height: 8),
+          WeekSelector(
+            key: const ValueKey('preview-week-selector'),
+            maxWeek: semester.maxWeek,
+            selectedWeek: _selectedWeek,
+            onChanged: (week) => setState(() => _selectedWeek = week),
           ),
           const SizedBox(height: 10),
           TimetableGrid(
