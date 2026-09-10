@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 
+import '../services/academic_calendar_date_resolver.dart';
 import '../services/academic_course_page_recognizer.dart';
 
 bool get isAcademicSystemImportSupported =>
@@ -28,6 +29,8 @@ class _AcademicSystemImportPage extends StatefulWidget {
 class _AcademicSystemImportPageState extends State<_AcademicSystemImportPage> {
   static const _coursePageUrl =
       'https://jwk.lzu.edu.cn/academic/student/currcourse/currcourse.jsdo';
+  static const _calendarLookupTimeout = Duration(seconds: 15);
+  static const _calendarPollInterval = Duration(milliseconds: 150);
   static const _captureScript = '''
     (() => JSON.stringify({
       pageUrl: window.location.href,
@@ -35,7 +38,11 @@ class _AcademicSystemImportPageState extends State<_AcademicSystemImportPage> {
       selectedYear: document.querySelector('select[name="year"]')
           ?.selectedOptions?.[0]?.textContent?.trim() || '',
       selectedTerm: document.querySelector('select[name="term"]')
-          ?.selectedOptions?.[0]?.textContent?.trim() || ''
+          ?.selectedOptions?.[0]?.textContent?.trim() || '',
+      selectedYearId: document.querySelector('select[name="year"]')
+          ?.value || '',
+      selectedTermId: document.querySelector('select[name="term"]')
+          ?.value || ''
     }))()
   ''';
 
@@ -48,6 +55,7 @@ class _AcademicSystemImportPageState extends State<_AcademicSystemImportPage> {
   bool _canPop = false;
   bool _isLeaving = false;
   String? _loadError;
+  int _calendarLookupRequestId = 0;
 
   bool get _isCoursePage =>
       AcademicCoursePageRecognizer.isCoursePageUrl(_currentUrl);
@@ -200,7 +208,19 @@ class _AcademicSystemImportPageState extends State<_AcademicSystemImportPage> {
         _captureScript,
       );
       final capture = _decodeCapture(result);
-      final recognized = AcademicCoursePageRecognizer.recognize(capture);
+      final metadata = AcademicCoursePageRecognizer.extractMetadata(capture);
+      DateTime? firstWeekMonday;
+      String? firstWeekMondayLookupNotice;
+      try {
+        firstWeekMonday = await _loadFirstWeekMonday(metadata);
+      } catch (error) {
+        firstWeekMondayLookupNotice = _calendarLookupNotice(error);
+      }
+      final recognized = AcademicCoursePageRecognizer.recognize(
+        capture,
+        firstWeekMonday: firstWeekMonday,
+        firstWeekMondayLookupNotice: firstWeekMondayLookupNotice,
+      );
       await _leave(result: recognized);
     } catch (error) {
       if (mounted) {
@@ -234,7 +254,116 @@ class _AcademicSystemImportPageState extends State<_AcademicSystemImportPage> {
       html: html,
       selectedYear: data['selectedYear'] as String?,
       selectedTerm: data['selectedTerm'] as String?,
+      selectedYearId: data['selectedYearId'] as String?,
+      selectedTermId: data['selectedTermId'] as String?,
     );
+  }
+
+  Future<DateTime> _loadFirstWeekMonday(
+    AcademicSemesterMetadata metadata,
+  ) async {
+    final uri = AcademicCalendarDateResolver.buildUri(
+      yearId: metadata.yearId ?? '',
+      termId: metadata.termId ?? '',
+    );
+    final requestId = ++_calendarLookupRequestId;
+    final resultKey = '__lzuTimetableCalendarResponse$requestId';
+    final encodedResultKey = jsonEncode(resultKey);
+    try {
+      await _controller.runJavaScript('''
+        (() => {
+          const resultKey = $encodedResultKey;
+          const complete = (message) => {
+            window[resultKey] = message;
+          };
+          window[resultKey] = null;
+          try {
+            const request = new XMLHttpRequest();
+            request.open('GET', ${jsonEncode(uri.toString())}, true);
+            request.withCredentials = true;
+            request.timeout = 12000;
+            request.onload = () => complete({
+              status: request.status,
+              body: request.responseText,
+              url: request.responseURL,
+            });
+            request.onerror = () => complete({error: '校历请求网络错误'});
+            request.ontimeout = () => complete({error: '校历请求超时'});
+            request.send();
+          } catch (_) {
+            complete({error: '校历请求未能启动'});
+          }
+        })()
+      ''');
+      final response = await _waitForCalendarLookup(resultKey);
+      final responseError = response.error;
+      if (responseError != null) {
+        throw FormatException(responseError);
+      }
+      if (response.status != 200) {
+        throw FormatException('校历请求失败（${response.status}）');
+      }
+      final responseBody = response.body;
+      if (responseBody == null) {
+        throw const FormatException('校历响应不包含内容');
+      }
+      return AcademicCalendarDateResolver.firstWeekMonday(responseBody);
+    } finally {
+      try {
+        await _controller.runJavaScript('delete window[$encodedResultKey]');
+      } catch (_) {
+        // The page can leave while the transient calendar response is pending.
+      }
+    }
+  }
+
+  Future<_CalendarLookupResponse> _waitForCalendarLookup(
+    String resultKey,
+  ) async {
+    final encodedResultKey = jsonEncode(resultKey);
+    final deadline = DateTime.now().add(_calendarLookupTimeout);
+    while (DateTime.now().isBefore(deadline)) {
+      final result = await _controller.runJavaScriptReturningResult(
+        'JSON.stringify(window[$encodedResultKey] ?? null)',
+      );
+      final response = _decodeCalendarLookupResponse(result);
+      if (response != null) {
+        return response;
+      }
+      await Future<void>.delayed(_calendarPollInterval);
+    }
+    throw TimeoutException('校历请求超时');
+  }
+
+  _CalendarLookupResponse? _decodeCalendarLookupResponse(Object value) {
+    dynamic decoded = value;
+    for (var attempt = 0; attempt < 2 && decoded is String; attempt++) {
+      decoded = jsonDecode(decoded);
+    }
+    if (decoded == null) {
+      return null;
+    }
+    if (decoded is! Map) {
+      throw const FormatException('无法读取校历响应');
+    }
+    final data = Map<String, Object?>.from(decoded);
+    final status = data['status'];
+    final body = data['body'];
+    final error = data['error'];
+    return _CalendarLookupResponse(
+      status: status is int ? status : null,
+      body: body is String ? body : null,
+      error: error is String && error.isNotEmpty ? error : null,
+    );
+  }
+
+  String _calendarLookupNotice(Object error) {
+    final reason = error is TimeoutException
+        ? '校历请求超时'
+        : error is FormatException
+        ? error.message.toString()
+        : '校历请求失败';
+    return '未能自动获取开学日期（$reason），请在下一页手动填写。';
   }
 
   Future<void> _leave({RecognizedAcademicCoursePage? result}) async {
@@ -262,4 +391,12 @@ class _AcademicSystemImportPageState extends State<_AcademicSystemImportPage> {
     }
     return '识别失败，请确认当前页面已完成学期查询';
   }
+}
+
+class _CalendarLookupResponse {
+  const _CalendarLookupResponse({this.status, this.body, this.error});
+
+  final int? status;
+  final String? body;
+  final String? error;
 }

@@ -6,6 +6,7 @@ import 'course_editor_page.dart';
 import 'course_schedule_management_page.dart';
 import 'quick_add_course_dialog.dart';
 import 'timetable_grid.dart';
+import 'week_selector.dart';
 import '../database/app_database.dart';
 import '../models/schedule_models.dart';
 import '../services/timetable_repository.dart';
@@ -596,46 +597,31 @@ class _ScheduleControls extends StatelessWidget {
           ),
         ),
       ),
-      child: compact
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (showSemesterSelector)
-                  _SemesterDropdown(
-                    semesters: semesters,
-                    selectedSemester: selectedSemester,
-                    onChanged: onSemesterChanged,
-                  ),
-                if (showSemesterSelector) const SizedBox(height: 10),
-                _WeekDropdown(
-                  maxWeek: selectedSemester.maxWeek,
-                  selectedWeek: selectedWeek,
-                  onChanged: onWeekChanged,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (showSemesterSelector) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SizedBox(
+                width: compact ? double.infinity : 260,
+                child: _SemesterDropdown(
+                  semesters: semesters,
+                  selectedSemester: selectedSemester,
+                  onChanged: onSemesterChanged,
                 ),
-              ],
-            )
-          : Row(
-              children: [
-                if (showSemesterSelector)
-                  SizedBox(
-                    width: 260,
-                    child: _SemesterDropdown(
-                      semesters: semesters,
-                      selectedSemester: selectedSemester,
-                      onChanged: onSemesterChanged,
-                    ),
-                  ),
-                if (showSemesterSelector) const SizedBox(width: 12),
-                SizedBox(
-                  width: 160,
-                  child: _WeekDropdown(
-                    maxWeek: selectedSemester.maxWeek,
-                    selectedWeek: selectedWeek,
-                    onChanged: onWeekChanged,
-                  ),
-                ),
-              ],
+              ),
             ),
+            const SizedBox(height: 10),
+          ],
+          WeekSelector(
+            key: ValueKey(selectedSemester.id),
+            maxWeek: selectedSemester.maxWeek,
+            selectedWeek: selectedWeek,
+            onChanged: onWeekChanged,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -857,41 +843,6 @@ class _SemesterDropdown extends StatelessWidget {
       onChanged: (id) {
         final semester = semesters.firstWhere((semester) => semester.id == id);
         onChanged(semester);
-      },
-    );
-  }
-}
-
-class _WeekDropdown extends StatelessWidget {
-  const _WeekDropdown({
-    required this.maxWeek,
-    required this.selectedWeek,
-    required this.onChanged,
-  });
-
-  final int maxWeek;
-  final int selectedWeek;
-  final ValueChanged<int> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return DropdownButtonFormField<int>(
-      key: ValueKey(selectedWeek),
-      initialValue: selectedWeek,
-      isExpanded: true,
-      decoration: const InputDecoration(
-        labelText: '周次',
-        border: OutlineInputBorder(),
-        isDense: true,
-      ),
-      items: [
-        for (var week = 1; week <= maxWeek; week++)
-          DropdownMenuItem(value: week, child: Text('第$week周')),
-      ],
-      onChanged: (week) {
-        if (week != null) {
-          onChanged(week);
-        }
       },
     );
   }

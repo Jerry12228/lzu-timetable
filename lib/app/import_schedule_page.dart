@@ -7,6 +7,7 @@ import '../models/schedule_models.dart';
 import '../services/semester_importer.dart';
 import '../services/timetable_repository.dart';
 import 'timetable_grid.dart';
+import 'week_selector.dart';
 
 class ImportSchedulePage extends StatefulWidget {
   const ImportSchedulePage({
@@ -16,6 +17,7 @@ class ImportSchedulePage extends StatefulWidget {
     this.editingSemesterId,
     this.initialDisplayName,
     this.initialTermStartDate,
+    this.initialNotice,
     this.initialSemester,
     this.initialCourseHtml,
     this.hideCourseHtml = false,
@@ -27,6 +29,7 @@ class ImportSchedulePage extends StatefulWidget {
   final int? editingSemesterId;
   final String? initialDisplayName;
   final DateTime? initialTermStartDate;
+  final String? initialNotice;
   final Semester? initialSemester;
   final String? initialCourseHtml;
   final bool hideCourseHtml;
@@ -127,7 +130,7 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
                     key: const ValueKey('import-date-field'),
                     controller: _dateController,
                     decoration: InputDecoration(
-                      labelText: '第一周星期一日期',
+                      labelText: '开学日期',
                       hintText: 'yyyy-mm-dd',
                       border: const OutlineInputBorder(),
                       suffixIcon: IconButton(
@@ -189,6 +192,10 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
                 ],
               ),
             ),
+            if (widget.initialNotice case final notice?) ...[
+              const SizedBox(height: 14),
+              _MessageBanner(message: notice, isError: false),
+            ],
             if (_errorMessage != null) ...[
               const SizedBox(height: 14),
               _MessageBanner(message: _errorMessage!, isError: true),
@@ -289,7 +296,9 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
     try {
       final hasValidPreview =
           preview != null && _previewKey == _currentInputKey;
-      final semester = hasValidPreview ? preview : _parseInputForPreview();
+      final semester = hasValidPreview
+          ? preview.copyWith(termStartDate: _validatedStartDate())
+          : _parseInputForPreview();
       final id = await widget.repository.saveSchedule(
         semesterId: widget.editingSemesterId,
         semester: semester,
@@ -378,10 +387,10 @@ class _ImportSchedulePageState extends State<ImportSchedulePage> {
       if (allowMissing) {
         return null;
       }
-      throw const FormatException('请输入有效的第一周星期一日期，例如 2026-02-23');
+      throw const FormatException('请输入有效的开学日期，例如 2026-02-23');
     }
     if (date.weekday != DateTime.monday) {
-      throw const FormatException('第一周星期一日期必须是星期一');
+      throw const FormatException('开学日期必须是星期一');
     }
     return date;
   }
@@ -480,27 +489,13 @@ class _PreviewCardState extends State<_PreviewCard> {
           _PreviewLine(label: '课程总数', value: '${semester.courses.length} 门'),
           _PreviewLine(label: '最大周次', value: '第 ${semester.maxWeek} 周'),
           const SizedBox(height: 8),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 260),
-            child: DropdownButtonFormField<int>(
-              key: const ValueKey('preview-week-dropdown'),
-              initialValue: _selectedWeek,
-              decoration: const InputDecoration(
-                labelText: '预览周次',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              items: [
-                for (var week = 1; week <= semester.maxWeek; week++)
-                  DropdownMenuItem(value: week, child: Text('第$week周')),
-              ],
-              onChanged: (value) {
-                if (value == null) {
-                  return;
-                }
-                setState(() => _selectedWeek = value);
-              },
-            ),
+          const Text('预览周次'),
+          const SizedBox(height: 8),
+          WeekSelector(
+            key: const ValueKey('preview-week-selector'),
+            maxWeek: semester.maxWeek,
+            selectedWeek: _selectedWeek,
+            onChanged: (week) => setState(() => _selectedWeek = week),
           ),
           const SizedBox(height: 10),
           TimetableGrid(

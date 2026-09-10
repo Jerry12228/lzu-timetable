@@ -4,6 +4,7 @@ import 'package:drift/drift.dart' as drift;
 import 'package:drift/native.dart';
 import 'package:lzu_timetable/app/course_schedule_app.dart';
 import 'package:lzu_timetable/app/import_schedule_page.dart';
+import 'package:lzu_timetable/app/week_selector.dart';
 import 'package:lzu_timetable/database/app_database.dart';
 import 'package:lzu_timetable/models/schedule_models.dart';
 import 'package:lzu_timetable/services/semester_importer.dart';
@@ -282,14 +283,177 @@ void main() {
 
     expect(find.text('大学生心理健康（网络共享课）'), findsNothing);
 
-    await tester.tap(find.text('第1周').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('第2周').last);
+    await tester.tap(find.byKey(const ValueKey('week-button-2')));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('开学日期未配置'), findsNothing);
     expect(find.text('大学生心理健康（网络共享课）'), findsOneWidget);
+    expect(
+      tester.widget<WeekSelector>(find.byType(WeekSelector)).selectedWeek,
+      2,
+    );
+    expect(find.text('03-02'), findsOneWidget);
   });
+
+  testWidgets('semester changes reveal the selected week on mobile', (
+    tester,
+  ) async {
+    final repository = await _emptyRepository();
+    final later = semester.copyWith(
+      displayName: '新学期',
+      termStartDate: DateTime(2026, 9, 7),
+    );
+    await repository.saveSchedule(
+      semester: later,
+      replaceImportedCourses: true,
+    );
+    await _pumpSchedule(
+      tester,
+      semester.copyWith(weekCount: 30),
+      repository: repository,
+      size: const Size(390, 844),
+      currentDate: DateTime(2026, 7, 13),
+    );
+    final selected = tester
+        .widget<WeekSelector>(find.byType(WeekSelector))
+        .selectedWeek;
+    expect(selected, greaterThan(10));
+    expect(
+      find.byKey(ValueKey('week-button-$selected')).hitTestable(),
+      findsOneWidget,
+    );
+    await tester.drag(find.byType(WeekSelector), const Offset(-3000, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('mobile-schedule-menu-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('学期'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('新学期').last);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<WeekSelector>(find.byType(WeekSelector)).selectedWeek,
+      1,
+    );
+    expect(
+      find.byKey(const ValueKey('week-button-1')).hitTestable(),
+      findsOneWidget,
+    );
+    expect(find.text('09-07'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final origin in CourseOrigin.values) {
+    testWidgets('saves and reloads edited locations for $origin', (
+      tester,
+    ) async {
+      final repository = await _emptyRepository();
+      final source = semester.courses.firstWhere(
+        (course) => course.name == '中国近现代史纲要',
+      );
+      final testCourse = source.copyWith(
+        origin: origin,
+        sessions: [
+          for (var week = 1; week <= 3; week++)
+            source.sessions.first.copyWith(week: week, weekday: 1),
+        ],
+      );
+      final testSemester = semester.copyWith(courses: [testCourse]);
+      final id = await repository.saveSchedule(
+        semester: testSemester.copyWith(
+          courses: origin == CourseOrigin.manual ? [] : [testCourse],
+        ),
+        replaceImportedCourses: true,
+      );
+      if (origin == CourseOrigin.manual) {
+        await repository.saveManualCourse(semesterId: id, course: testCourse);
+      }
+      await _pumpSchedule(tester, testSemester, repository: repository);
+      await tester.tap(find.text(source.name).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('edit-course-button')));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('session-row-0')),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('编辑节次').first);
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('session-location-field')),
+        '  新地点 B202  ',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, '保存'));
+      await tester.pumpAndSettle();
+      expect(
+        (await repository.loadSemester(
+          id,
+        ))!.courses.single.sessions.first.location,
+        testCourse.sessions.first.location,
+      );
+      await tester.tap(find.byKey(const ValueKey('save-course-button')));
+      await tester.pumpAndSettle();
+      expect(find.text('新地点 B202'), findsOneWidget);
+      expect(
+        (await repository.loadSemester(
+          id,
+        ))!.courses.single.sessions.first.location,
+        '新地点 B202',
+      );
+      expect(
+        (await repository.loadSemester(
+          id,
+        ))!.courses.single.sessions.skip(1).map((s) => s.location),
+        testCourse.sessions.skip(1).map((s) => s.location),
+      );
+      await tester.tap(find.text(source.name).first);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('新地点 B202'), findsWidgets);
+      await tester.tap(find.byKey(const ValueKey('edit-course-button')));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('session-row-0')),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('编辑节次').first);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<TextField>(
+              find.byKey(const ValueKey('session-location-field')),
+            )
+            .controller!
+            .text,
+        '新地点 B202',
+      );
+      await tester.tap(find.widgetWithText(TextButton, '取消'));
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, 1500));
+      await tester.pumpAndSettle();
+      final locationField = find.byKey(const ValueKey('course-location-field'));
+      expect(tester.widget<TextField>(locationField).decoration!.hintText, '-');
+      await tester.enterText(locationField, '  整门课程统一地点  ');
+      await tester.tap(find.byKey(const ValueKey('save-course-button')));
+      await tester.pumpAndSettle();
+      expect(find.text('整门课程统一地点'), findsOneWidget);
+      if (origin == CourseOrigin.imported) {
+        await repository.saveSchedule(
+          semesterId: id,
+          semester: testSemester,
+          replaceImportedCourses: true,
+        );
+      }
+      expect(
+        (await repository.loadSemester(
+          id,
+        ))!.courses.single.sessions.map((s) => s.location),
+        ['整门课程统一地点', '整门课程统一地点', '整门课程统一地点'],
+      );
+    });
+  }
 
   testWidgets('opens course detail dialog from a course tile', (tester) async {
     await _pumpSchedule(tester, semester);
@@ -399,9 +563,7 @@ void main() {
     expect(course.sessions.map((session) => session.week), [1, 2]);
     expect(course.sessions.first.sections, ['第1节', '第2节']);
 
-    await tester.tap(find.text('第1周').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('第2周').last);
+    await tester.tap(find.byKey(const ValueKey('week-button-2')));
     await tester.pumpAndSettle();
     expect(find.text('手动新增课程'), findsOneWidget);
   });
@@ -419,7 +581,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('edit-course-button')));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byTooltip('编辑节次').first);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('session-row-0')),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('编辑节次').first);
     await tester.pumpAndSettle();
@@ -427,7 +593,10 @@ void main() {
     expect(find.byKey(const ValueKey('session-week-dropdown')), findsOneWidget);
     expect(find.byKey(const ValueKey('session-section-第1节')), findsOneWidget);
     expect(find.text('上课大节'), findsNothing);
-    expect(find.text('地点'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('session-location-field')),
+      findsOneWidget,
+    );
     await tester.tap(find.byKey(const ValueKey('session-week-dropdown')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('第2周').last);
@@ -442,7 +611,11 @@ void main() {
     await tester.tap(firstSessionCheckbox);
     await tester.pumpAndSettle();
     expect(tester.widget<Checkbox>(firstSessionCheckbox).value, isTrue);
-    await tester.drag(find.byType(Scrollable).first, const Offset(0, 1200));
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('delete-selected-sessions-button')),
+      -250,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
     expect(
       find.byKey(const ValueKey('delete-selected-sessions-button')),
@@ -632,7 +805,7 @@ void main() {
     );
   });
 
-  testWidgets('auto previews academic recognition without showing html', (
+  testWidgets('auto previews academic recognition with its resolved Monday', (
     tester,
   ) async {
     final repository = await _emptyRepository();
@@ -642,6 +815,7 @@ void main() {
           existingDisplayNames: const [],
           repository: repository,
           initialDisplayName: '识别课表',
+          initialTermStartDate: DateTime(2026, 2, 23),
           initialCourseHtml: File(
             'assets/raw/2025-2026-2-courses.html',
           ).readAsStringSync(),
@@ -656,6 +830,42 @@ void main() {
     expect(find.text('预览结果'), findsOneWidget);
     expect(find.text('中国近现代史纲要'), findsOneWidget);
     expect(find.byKey(const ValueKey('import-date-field')), findsOneWidget);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const ValueKey('import-date-field')))
+          .controller!
+          .text,
+      '2026-02-23',
+    );
+    expect(find.text('02-23'), findsWidgets);
+  });
+
+  testWidgets('calendar lookup notice still requires a first-week Monday', (
+    tester,
+  ) async {
+    final repository = await _emptyRepository();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ImportSchedulePage(
+          existingDisplayNames: const [],
+          repository: repository,
+          initialDisplayName: '识别课表',
+          initialNotice: '未能自动获取开学日期，请在下一页手动填写。',
+          initialCourseHtml: File(
+            'assets/raw/2025-2026-2-courses.html',
+          ).readAsStringSync(),
+          hideCourseHtml: true,
+          autoPreview: true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('未能自动获取开学日期，请在下一页手动填写。'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('confirm-import-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('请输入有效的开学日期，例如 2026-02-23'), findsOneWidget);
   });
 
   testWidgets('recognizes and validates the configurable semester week count', (
@@ -696,17 +906,63 @@ void main() {
     expect(find.text('大学生心理健康（网络共享课）'), findsNothing);
 
     await tester.ensureVisible(
-      find.byKey(const ValueKey('preview-week-dropdown')),
+      find.byKey(const ValueKey('preview-week-selector')),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('preview-week-dropdown')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('第2周').last);
+    await tester.tap(find.byKey(const ValueKey('week-button-2')));
     await tester.pumpAndSettle();
 
     expect(find.text('03-02'), findsWidgets);
     expect(find.text('2026-03-02 - 2026-03-08'), findsNothing);
     expect(find.text('大学生心理健康（网络共享课）'), findsOneWidget);
+  });
+
+  testWidgets('scrolls preview weeks on mobile without page overflow', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ImportSchedulePage(
+          existingDisplayNames: const [],
+          repository: await _emptyRepository(),
+          initialDisplayName: '识别课表',
+          initialTermStartDate: DateTime(2026, 2, 23),
+          initialCourseHtml: File(
+            'assets/raw/2025-2026-2-courses.html',
+          ).readAsStringSync(),
+          hideCourseHtml: true,
+          autoPreview: true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final selector = find.byKey(const ValueKey('preview-week-selector'));
+    await tester.scrollUntilVisible(
+      selector,
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    final page = tester
+        .state<ScrollableState>(find.byType(Scrollable).first)
+        .position;
+    final pageOffset = page.pixels;
+    await tester.drag(selector, const Offset(-3000, 0));
+    await tester.pumpAndSettle();
+    expect(page.pixels, pageOffset);
+    expect(tester.widget<WeekSelector>(selector).selectedWeek, 1);
+    await tester.tap(find.byKey(const ValueKey('week-button-17')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<WeekSelector>(selector).selectedWeek, 17);
+    expect(page.pixels, pageOffset);
+    expect(tester.getRect(selector).right, lessThanOrEqualTo(390));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('confirms preview and selects imported schedule', (tester) async {

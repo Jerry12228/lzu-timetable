@@ -129,7 +129,7 @@ void main() {
       customization: CourseCustomization(
         courseId: source.id,
         metadata: CourseMetadata.fromCourse(source).copyWith(name: '高等数学 B'),
-        sessions: source.sessions.take(1).toList(),
+        sessions: [source.sessions.first.copyWith(location: '本地修改的教室')],
       ),
     );
 
@@ -165,6 +165,7 @@ void main() {
     expect(restored.id, source.id);
     expect(restored.name, '高等数学 B');
     expect(restored.sessions, hasLength(1));
+    expect(restored.sessions.single.location, '本地修改的教室');
 
     await repository.clearImportedOverride(restored.id);
     final reset = (await repository.loadSemester(
@@ -255,6 +256,64 @@ void main() {
       isNot(contains(manualId)),
     );
   });
+
+  for (final origin in CourseOrigin.values) {
+    test('round trips per-week location edits for $origin', () async {
+      final sample = _sampleSemester();
+      final source = sample.courses.firstWhere(
+        (course) => course.hasFixedSchedule,
+      );
+      final session = source.sessions.first;
+      final course = source.copyWith(
+        origin: origin,
+        sessions: [
+          for (var week = 1; week <= 3; week++)
+            session.copyWith(week: week, location: '原教室'),
+        ],
+      );
+      final id = await repository.saveSchedule(
+        semester: sample.copyWith(
+          courses: origin == CourseOrigin.imported ? [course] : [],
+        ),
+        replaceImportedCourses: true,
+      );
+      if (origin == CourseOrigin.manual) {
+        await repository.saveManualCourse(semesterId: id, course: course);
+      }
+      final stored = (await repository.loadSemester(id))!.courses.single;
+      final edited = [
+        stored.sessions[0].copyWith(location: '新教室'),
+        stored.sessions[1].copyWith(location: ''),
+        stored.sessions[2],
+      ];
+      await repository.saveCustomization(
+        semesterId: id,
+        customization: CourseCustomization(
+          courseId: stored.id,
+          metadata: CourseMetadata.fromCourse(stored),
+          sessions: edited,
+        ),
+      );
+      if (origin == CourseOrigin.imported) {
+        await repository.saveSchedule(
+          semesterId: id,
+          semester: sample.copyWith(courses: [course]),
+          replaceImportedCourses: true,
+        );
+      }
+      final reloaded = (await TimetableRepository(
+        database,
+      ).loadSemester(id))!.courses.single;
+      expect(
+        reloaded.sessions.map(
+          (s) => (s.week, s.weekday, s.startSection, s.endSection, s.location),
+        ),
+        edited.map(
+          (s) => (s.week, s.weekday, s.startSection, s.endSection, s.location),
+        ),
+      );
+    });
+  }
 
   test('rolls back a failed aggregate import', () async {
     final valid = _sampleSemester();
